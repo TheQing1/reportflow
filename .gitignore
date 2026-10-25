@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# 环境变量
+.env
+.env.local
+
+# 数据库与向量库
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+data/chroma/
+# 运行时知识库。用 `docs*` 而不是 `docs/`：换语料做验证时会另建
+# data/docs_real/ 之类，那同样是运行时副本，不该进版本库。
+# 项目自带的两套语料在仓库根的 sample-corpus/ 与 real-corpus/，那两个要入库。
+data/docs*/
+data/output/
+# LLM 录制缓存：默认不入库（模型产出物、体积随主题增长）。
+# 若想让全队/CI 离线回放同一批结果，可显式 `git add -f data/llm_cache/<kk>/*.json`
+data/llm_cache/
+
+# 前端
+node_modules/
+dist/
+.vite/
+*.local
+
+# 日志与临时文件
+logs/
+*.log
+tmp/
+.DS_Store
+
+# 评测产物（可重跑生成；数据集本身要进版本库）
+eval/results/
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+
+# 会话记忆（agent 内部工作日志）。只存在于本地，不进版本库。
+.workbuddy/

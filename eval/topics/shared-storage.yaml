@@ -1,0 +1,17 @@
+id: shared-storage
+topic: 共享储能模式的落地与收益
+sections: 3
+notes: 模式类题目，最容易写成泛泛而谈而没有数字
+must_cover:
+  - 共享储能模式在青海、湖南等省份落地项目超过40个
+  - 2025年储能容量租赁均价约120元/千瓦·年，同比下降22%
+  - 2025年共有23个省级行政区出台了储能容量补偿或容量租赁价格政策
+must_cite:
+  - doc_16_business_model
+  - doc_02_policy_local
+  - doc_17_market
+  - doc_08_region_grid
+  - doc_01_policy_national
+forbidden:
+  - 共享储能模式在青海、湖南等省份落地项目超过14个
+  - 容量租赁价格同比上涨22%

@@ -1,0 +1,16 @@
+id: cig-business
+topic: 工商业储能的商业模式与收益结构
+sections: 4
+notes: 收益单一性判断
+must_cover:
+  - 峰谷套利仍是最主要收益来源，占工商业储能项目收益的70%以上
+  - 合同能源管理模式在浙江、广东两省的渗透率超过60%
+  - 2025年工商业储能新增装机约8.4GWh，同比增长62%
+  - 2025年工商业储能EPC均价为1.05元/Wh，同比下降18%
+must_cite:
+  - doc_16_business_model
+  - doc_10_cost
+  - doc_04_scale_cig
+forbidden:
+  - 峰谷套利占工商业储能项目收益的50%左右
+  - 合同能源管理模式渗透率不足20%

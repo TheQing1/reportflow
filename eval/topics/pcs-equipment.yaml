@@ -1,0 +1,15 @@
+id: pcs-equipment
+topic: 储能变流器与关键设备环节
+sections: 3
+notes: 设备环节的集中度与技术迭代
+must_cover:
+  - 2025年国内储能PCS出货45GW，其中1500V机型占比升至68%
+  - 磷酸铁锂电池在新型储能装机中的占比达到96.5%，仍是最主流路线
+  - 2025年储能系统集成环节CR5约为38%，较上一年提升4个百分点
+must_cite:
+  - doc_14_tech_pcs
+  - doc_11_tech_lfp
+  - doc_09_competition
+forbidden:
+  - 2025年国内储能PCS出货约25GW
+  - 1500V机型占比降至38%

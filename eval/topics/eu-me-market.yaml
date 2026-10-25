@@ -1,0 +1,14 @@
+id: eu-me-market
+topic: 欧洲户储调整与中东招标放量
+sections: 3
+notes: 两个区域方向相反，考「不把一升一降混为一谈」
+must_cover:
+  - 2025年欧洲户用储能新增装机约9GWh，同比下降15%
+  - 2025年中东地区储能招标规模超过20GWh，以沙特、阿联酋项目为主
+  - 2025年中国企业储能电池出口量约180GWh，同比增长52%
+must_cite:
+  - doc_19_overseas_eu_me
+  - doc_18_overseas_us
+forbidden:
+  - 2025年中东地区储能招标规模超过10GWh
+  - 欧洲户用储能新增装机约19GWh

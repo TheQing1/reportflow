@@ -1,0 +1,15 @@
+id: long-duration
+topic: 长时储能需求与液流电池
+sections: 3
+notes: 长时场景的经济性判断
+must_cover:
+  - 全钒液流电池2025年新增装机约450MWh，在4小时以上长时场景占比明显提升
+  - 2025年储能系统均价降至0.48元/Wh，同比下降31%
+  - 预计2026年新型储能新增装机6000万千瓦，增速回落至25%左右
+must_cite:
+  - doc_13_tech_flow
+  - doc_10_cost
+  - doc_21_outlook
+forbidden:
+  - 全钒液流电池2025年新增装机约150MWh
+  - 液流电池单位造价约为磷酸铁锂的0.8倍

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reportflow-backend"
+version = "0.2.0"
+description = "ReportFlow 后端：DAG 编排的多 Agent 研报生成流水线"
+requires-python = ">=3.11"
+# 阶段一：SQLAlchemy（状态落库）
+# 阶段二：httpx（调 OpenAI 兼容接口）
+# 阶段四：FastAPI + uvicorn（HTTP 与 SSE）
+# 刻意不引入 openai SDK / 向量库 / 分词库，见 docs/ARCHITECTURE.md §9
+dependencies = ["SQLAlchemy>=2.0", "httpx>=0.25", "fastapi>=0.104", "uvicorn>=0.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+reportflow = "app.cli:main"
+
+[tool.setuptools]
+packages = [
+    "app",
+    "app.api",
+    "app.contracts",
+    "app.core",
+    "app.persistence",
+    "app.agents",
+    "app.llm",
+    "app.rag",
+    "app.orchestrator",
+    "app.evaluation",
+    "scripts",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

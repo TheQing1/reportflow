@@ -1,0 +1,15 @@
+id: resi-storage
+topic: 户用储能市场：增长失速与海外依赖
+sections: 3
+notes: 户用是本知识库里唯一负增长的细分，考「不要把下降读成增长」
+must_cover:
+  - 2025年户用储能新增装机约3.2GWh，同比下降9%
+  - 2025年欧洲户用储能新增装机约9GWh，同比下降15%
+  - 2025年工商业储能新增装机约8.4GWh，同比增长62%
+must_cite:
+  - doc_05_scale_resi
+  - doc_19_overseas_eu_me
+  - doc_04_scale_cig
+forbidden:
+  - 2025年户用储能新增装机约3.9GWh
+  - 2025年欧洲户用储能新增装机同比下降25%

@@ -1,0 +1,15 @@
+id: pcs-upgrade
+topic: 储能变流器的出货结构与技术升级
+sections: 3
+notes: 出货量级 GW 与占比同时出现，容易互相污染
+must_cover:
+  - 2025年国内储能PCS出货45GW，其中1500V机型占比升至68%
+  - 2025年储能系统均价降至0.48元/Wh，同比下降31%
+  - 2025年储能系统集成环节CR5约为38%，较上一年提升4个百分点
+must_cite:
+  - doc_14_tech_pcs
+  - doc_10_cost
+  - doc_09_competition
+forbidden:
+  - 2025年国内储能PCS出货25GW
+  - 1500V机型占比降至38%

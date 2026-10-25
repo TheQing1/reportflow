@@ -1,0 +1,15 @@
+id: capacity-mechanism
+topic: 储能容量补偿与租赁机制
+sections: 3
+notes: 机制类主题，考「政策数量与价格」的准确复述
+must_cover:
+  - 2025年共有23个省级行政区出台了储能容量补偿或容量租赁价格政策
+  - 2025年储能容量租赁均价约120元/千瓦·年，同比下降22%
+  - 共享储能模式在青海、湖南等省份落地项目超过40个
+must_cite:
+  - doc_01_policy_national
+  - doc_16_business_model
+  - doc_08_region_grid
+forbidden:
+  - 2025年储能容量租赁均价约160元/千瓦·年
+  - 共有13个省级行政区出台容量补偿政策

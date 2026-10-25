@@ -1,0 +1,14 @@
+id: export-scale
+topic: 储能电池出口规模与结构
+sections: 3
+notes: 出口是本题唯一主轴，考「围绕一个数字讲清楚」
+must_cover:
+  - 2025年中国企业储能电池出口量约180GWh，同比增长52%
+  - 2025年中东地区储能招标规模超过20GWh，以沙特、阿联酋项目为主
+  - 2025年美国储能新增装机约18GW，同比增长35%
+must_cite:
+  - doc_18_overseas_us
+  - doc_19_overseas_eu_me
+forbidden:
+  - 2025年中国企业储能电池出口量约280GWh
+  - 2025年中国储能电池出口同比下降52%

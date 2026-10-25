@@ -1,0 +1,15 @@
+id: subsidy-policy
+topic: 地方补贴、容量补偿与租赁价格
+sections: 4
+notes: 三种价格工具混在一起，最容易张冠李戴
+must_cover:
+  - 2025年工商业储能补贴政策覆盖12个省份，单个项目最高补贴300元/千瓦
+  - 2025年共有23个省级行政区出台了储能容量补偿或容量租赁价格政策
+  - 2025年储能容量租赁均价约120元/千瓦·年，同比下降22%
+must_cite:
+  - doc_02_policy_local
+  - doc_16_business_model
+  - doc_01_policy_national
+forbidden:
+  - 2025年工商业储能补贴政策覆盖22个省份
+  - 2025年储能容量租赁均价约150元/千瓦·年

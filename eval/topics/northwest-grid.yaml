@@ -1,0 +1,15 @@
+id: northwest-grid
+topic: 西北地区电网侧储能的集群化布局
+sections: 3
+notes: 区域集中度与新能源基地的因果关系
+must_cover:
+  - 内蒙古、新疆、甘肃三个省区合计占电网侧储能新增装机的48%
+  - 2025年电网侧储能新增装机2100万千瓦，占新型储能新增装机的44%
+  - 共享储能模式在青海、湖南等省份落地项目超过40个
+must_cite:
+  - doc_08_region_grid
+  - doc_06_scale_grid
+  - doc_16_business_model
+forbidden:
+  - 内蒙古、新疆、甘肃合计占电网侧新增装机的58%
+  - 2025年电网侧储能新增装机1200万千瓦
