@@ -189,6 +189,13 @@ onMounted(async () => {
   await refreshHealth()
   await refreshTasks()
   if (tasks.value.length) await select(tasks.value[0].task_id)
+  // 深度链接：?tab=trace|check|corpus 直达面板，?doc=<doc_id> 直达引用抽屉。
+  // 把某条引用的原文链接发给同事核对时，对方打开就是高亮后的那篇，不用再点一遍。
+  const params = new URLSearchParams(location.search)
+  const wanted = params.get('tab')
+  if (wanted) tab.value = wanted
+  const doc = params.get('doc')
+  if (doc) await viewDoc(doc)
 })
 onUnmounted(() => stopStream?.())
 </script>
