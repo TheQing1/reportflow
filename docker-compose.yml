@@ -1,0 +1,51 @@
+# ReportFlow 一键起全栈：后端 8000 + 前端 5173
+#
+#   cp .env.example .env     # 至少填 LLM_API_KEY（可选：不填可用 LLM_MODE=replay 离线回放）
+#   docker compose up --build
+#   打开 http://localhost:5173
+#
+# 数据持久化：仓库根的 ./data 挂进容器，数据库 / 知识库 / 回放缓存 / 产出都在里面，
+# 容器删掉也不丢。
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: reportflow-backend:latest
+    container_name: reportflow-backend
+    ports:
+      - "8000:8000"
+    # required: false —— 没建 .env 也能起容器（此时无 key，需用 LLM_MODE=replay 离线回放）
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # 不涉密的默认项。密钥一律走 .env，绝不写进镜像或本文件
+      LOG_LEVEL: INFO
+      MAX_CONCURRENCY: "3"
+      # 生产切 MySQL 只需改这一行（并额外安装 pymysql）：
+      # DATABASE_URL=mysql+pymysql://user:pass@mysql:3306/reportflow
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 25s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: reportflow-frontend:latest
+    container_name: reportflow-frontend
+    ports:
+      # 与本地 vite dev server 端口保持一致，避免两套 URL
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

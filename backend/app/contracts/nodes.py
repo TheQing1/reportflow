@@ -6,9 +6,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 
 class NodeType(str, Enum):
@@ -85,7 +86,7 @@ class Graph:
     nodes: tuple[NodeSpec, ...]
 
     @classmethod
-    def of(cls, nodes: Iterable[NodeSpec]) -> "Graph":
+    def of(cls, nodes: Iterable[NodeSpec]) -> Graph:
         return cls(tuple(nodes))
 
     @property

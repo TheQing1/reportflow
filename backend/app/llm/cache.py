@@ -57,7 +57,7 @@ class CacheMode(str, Enum):
     AUTO = "auto"
 
     @classmethod
-    def parse(cls, raw: str | None) -> "CacheMode":
+    def parse(cls, raw: str | None) -> CacheMode:
         text = (raw or "").strip().lower()
         if not text:
             return cls.LIVE

@@ -22,9 +22,9 @@ from .llm import (
     LLMRequest,
     LLMResponse,
     LLMTransient,
+    LLMTransport,
     LLMUnavailable,
     LLMUsage,
-    LLMTransport,
     ModelPrice,
 )
 from .nodes import (

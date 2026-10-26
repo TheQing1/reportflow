@@ -98,7 +98,7 @@ class Settings:
     docs_dir: str = ""
 
     @classmethod
-    def load(cls, env_file: Path | None = None) -> "Settings":
+    def load(cls, env_file: Path | None = None) -> Settings:
         file_env = _read_env_file(env_file or _find_env_file() or Path("/nonexistent"))
         merged = {**file_env, **os.environ}  # 环境变量优先
 
@@ -150,6 +150,6 @@ class Settings:
             docs_dir=docs_dir,
         )
 
-    def with_overrides(self, **kwargs: object) -> "Settings":
+    def with_overrides(self, **kwargs: object) -> Settings:
         clean = {k: v for k, v in kwargs.items() if v is not None}
         return replace(self, **clean)  # type: ignore[arg-type]

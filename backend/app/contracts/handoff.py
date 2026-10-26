@@ -15,9 +15,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 SUMMARY_MAX_CHARS = 200
 QUOTE_MAX_CHARS = 300
@@ -58,7 +59,7 @@ class Fact:
     quote: str
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "Fact":
+    def from_dict(cls, raw: Mapping[str, Any]) -> Fact:
         claim = str(raw.get("claim", "")).strip()
         source_id = str(raw.get("source_id", "")).strip()
         quote = str(raw.get("quote", "")).strip()
@@ -101,7 +102,7 @@ class ResearchPacket:
     @classmethod
     def from_dict(
         cls, raw: Mapping[str, Any], *, chapter: int | None = None
-    ) -> "ResearchPacket":
+    ) -> ResearchPacket:
         ch = int(raw.get("chapter", chapter or 0))
         summary = _compress_summary(str(raw.get("summary", "")))
         facts_raw = raw.get("key_facts") or []
@@ -165,7 +166,7 @@ class ChapterDraft:
     @classmethod
     def from_dict(
         cls, raw: Mapping[str, Any], *, chapter: int | None = None
-    ) -> "ChapterDraft":
+    ) -> ChapterDraft:
         ch = int(raw.get("chapter", chapter or 0))
         markdown = str(raw.get("markdown", "")).strip()
         if not markdown:
@@ -238,7 +239,7 @@ class Defect:
     fix_target: str = "write"
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "Defect":
+    def from_dict(cls, raw: Mapping[str, Any]) -> Defect:
         dtype = str(raw.get("type", DefectType.ASSERTION_MISMATCH.value))
         target = str(raw.get("fix_target", "")).strip()
         if dtype == DefectType.MISSING_EVIDENCE.value:
@@ -285,7 +286,7 @@ class ReviewVerdict:
     @classmethod
     def from_dict(
         cls, raw: Mapping[str, Any], *, chapter: int | None = None
-    ) -> "ReviewVerdict":
+    ) -> ReviewVerdict:
         ch = int(raw.get("chapter", chapter or 0))
         verdict = str(raw.get("verdict", "")).strip().lower()
         if verdict not in {"pass", "revise"}:

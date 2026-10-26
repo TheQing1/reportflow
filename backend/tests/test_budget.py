@@ -37,7 +37,7 @@ class AllocateTest(unittest.TestCase):
             )
         )
         self.assertEqual(sorted(budgets), [1, 2, 3])
-        for i, docs in budgets.items():
+        for docs in budgets.values():
             self.assertLessEqual(len(docs), 2)
         # 6 篇文档分给 3 章，每章 2 篇 → 应当基本不重叠
         self.assertLess(overlap(budgets), 0.34)

@@ -372,7 +372,13 @@ class EvalRunner:
             "repeats": self.repeats,
             "summary": {arm.value: _summary_dict(s) for arm, s in summaries.items()},
             "ci95": {
-                arm.value: dict(zip(("low", "high"), ci95(list(per_case_means(s).values()))))
+                arm.value: dict(
+                    zip(
+                        ("low", "high"),
+                        ci95(list(per_case_means(s).values())),
+                        strict=True,
+                    )
+                )
                 for arm, s in samples.items()
             },
             "paired": [_paired_dict(c) for c in comparisons],

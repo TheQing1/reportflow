@@ -4,14 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reportflow-backend"
-version = "0.2.0"
+version = "0.5.0"
 description = "ReportFlow 后端：DAG 编排的多 Agent 研报生成流水线"
 requires-python = ">=3.11"
 # 阶段一：SQLAlchemy（状态落库）
 # 阶段二：httpx（调 OpenAI 兼容接口）
 # 阶段四：FastAPI + uvicorn（HTTP 与 SSE）
 # 刻意不引入 openai SDK / 向量库 / 分词库，见 docs/ARCHITECTURE.md §9
-dependencies = ["SQLAlchemy>=2.0", "httpx>=0.25", "fastapi>=0.104", "uvicorn>=0.24"]
+dependencies = [
+    "SQLAlchemy>=2.0",
+    "httpx>=0.25",
+    "fastapi>=0.104",
+    "uvicorn>=0.24",
+    # 评测数据集（eval/topics/*.yaml）的读写。缺失时 import 阶段才炸
+    "PyYAML>=6.0",
+    # FastAPI 文件上传（POST /api/corpus/upload）必需。
+    # 缺了它不会在启动时报错，而是第一次上传才抛 RuntimeError —— 极易被漏掉
+    "python-multipart>=0.0.9",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
@@ -37,3 +47,53 @@ packages = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# 排除生成物与运行时数据
+extend-exclude = ["data", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+# E/W：pycodestyle 基础错误与警告
+# F：pyflakes（未使用导入、未定义名称）—— 真正的 bug 捕手
+# I：import 排序，避免多人协作时的无意义 diff
+# UP：pyupgrade，强制现代语法（本项目要求 3.11+）
+# B：flake8-bugbear，常见反模式
+# ANN 与复杂规则刻意不开：类型注解已在 review 中把关，
+# 开太多规则会让 lint 变成噪音，反而没人看。
+select = ["E", "W", "F", "I", "UP", "B"]
+ignore = [
+    "B008",   # 函数调用作为默认值 —— FastAPI 的依赖注入惯用法，本项目刻意使用
+    "E501",   # 行宽：本项目含大量中文注释与 prompt 模板。
+              # 1) 按字符数计宽对中文不公平（一个汉字视觉宽度≈2 个英文字符）；
+              # 2) agents/*.py 里的 _SYSTEM 是 LLM prompt，换行会改变模型输入，
+              #    进而让 40 主题评测基线失效 —— 这个代价比"行超了 3 个字符"大得多。
+    "UP042",  # str+Enum → StrEnum：StrEnum 会改变 str() 的行为（返回值而非 "Cls.MEMBER"）。
+              # contracts/ 是被持久化和序列化的契约层，序列化口径必须稳定，故刻意保留。
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试里允许长行与断言风格，也允许 import 不在顶部（惰性导入是刻意的）
+"tests/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+# 渐进式：先让核心层强类型，第三方库缺 stub 时不报错
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+# 严格模式暂不全局开启：contracts/ 与 core/ 先行，其余逐步推进
+strict = false
+
+[[tool.mypy.overrides]]
+module = ["app.contracts.*", "app.core.*"]
+strict = true
+
+[tool.pytest.ini_options]
+# 从 backend/ 目录运行：python -m pytest
+testpaths = ["tests"]
+# 测试全部是同步函数，内部用 asyncio.run() 驱动调度器 —— 不需要 asyncio 插件
+addopts = "-ra --strict-markers"
+# 覆盖率：CI 产出报告供参考，不设 fail_under。
+# 硬性阈值会让 CI 因无关改动变红，反而培养「无视红灯」的习惯。
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

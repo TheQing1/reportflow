@@ -2,6 +2,7 @@
 
 > 输入一个行业主题，自动生成一份**每个数据都能追溯到原文**的研报初稿。
 
+[![CI](https://github.com/TheQing1/reportflow/actions/workflows/ci.yml/badge.svg)](https://github.com/TheQing1/reportflow/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11+-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green)
 ![Vue](https://img.shields.io/badge/Vue-3.4+-brightgreen)
@@ -69,9 +70,18 @@ Reviewer 先用程序核对「断言里的数字是否出现在所引原文」�
 
 ## 快速开始
 
+**方式 A · Docker（不需要本地装 Python / Node）**
+
+```bash
+cp .env.example .env      # 填 LLM_API_KEY
+docker compose up --build # 后端 8000 + 前端 5173
+```
+
+**方式 B · 本地**
+
 ```bash
 # 1) 装依赖
-cd backend  && pip install -e .
+cd backend  && pip install -r requirements.txt
 cd ../frontend && npm install
 
 # 2) 配 key（也可不填，见下）
@@ -80,9 +90,12 @@ cp .env.example .env      # 填 LLM_API_KEY
 # 3) 一键启动：后端 8000 + 前端 5173
 ./scripts/start.sh          # Git Bash / WSL
 scripts\start.bat           # Windows cmd / PowerShell
+make dev                    # 同上（Linux / macOS）
 ```
 
 打开 http://localhost:5173 提交任务、看 DAG 进度、点角标看原文。
+
+常用命令见 `make help`：测试 / lint / 切语料 / 起容器都在里面。
 
 **没有 key 也能跑开发**：默认 `LLM_MODE=auto`，第一次真调后写入 `data/llm_cache/`，之后命中缓存——毫秒级、结果逐字一致、成本 ¥0。要验收真实生成效果时传 `--live`。
 
@@ -306,6 +319,8 @@ SSE 用**轮询数据库**而不是给调度器加回调：调度器完全不知
 | [STAGE3_ACCEPTANCE.md](docs/STAGE3_ACCEPTANCE.md) | 评测方法论、三档对比、失败复盘 |
 | [STAGE4_ACCEPTANCE.md](docs/STAGE4_ACCEPTANCE.md) | 接口与前端验收 |
 | [REPEAT_RATE.md](docs/REPEAT_RATE.md) | 章节重复率：两次失败与真实语料上的因果验证 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、分层约束、测试与 commit 规范 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本演进，以及每次改动背后的理由 |
 
 ---
 

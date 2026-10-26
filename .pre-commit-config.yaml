@@ -1,0 +1,31 @@
+# pre-commit：把"靠自觉"的约束变成提交前的自动检查
+#
+#   pip install pre-commit && pre-commit install
+#
+# 本项目有一条靠人守不住的架构约束（分层依赖方向），
+# 它由 tests/test_layering.py 在 CI 里用 AST 强制校验，不放在这里——
+# 因为那需要完整的包环境，而 pre-commit hook 应该秒级返回。
+
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]        # 能自动修的先修（未使用导入等）
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2048]   # 语料都是文本，2MB 已经异常
+      # 密钥兜底：阻止 .env 被误提交
+      - id: detect-private-key

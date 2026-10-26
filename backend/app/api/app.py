@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -84,7 +84,7 @@ def create_app(
     rt = runtime or build_runtime(settings, profile="real", announce=True)
     log = get_logger("api")
 
-    app = FastAPI(title="ReportFlow", version="0.4.0")
+    app = FastAPI(title="ReportFlow", version="0.5.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(cors_origins),
@@ -368,9 +368,7 @@ async def _event_stream(rt: Runtime, task_id: str) -> AsyncIterator[bytes]:
     last_task: str | None = None
 
     def frame(event: str, data: dict[str, Any]) -> bytes:
-        return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode(
-            "utf-8"
-        )
+        return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
 
     while True:
         task = rt.store.get_task(task_id)

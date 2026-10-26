@@ -6,9 +6,8 @@ Scheduler 只负责"节点级"的推进。两者分开后，调度逻辑可以�
 
 from __future__ import annotations
 
-from typing import Any, Callable
-
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..contracts.agent import AgentRegistry

@@ -1,0 +1,47 @@
+# 不进 build context：既加快构建，也避免把本地数据与密钥打进镜像
+.git
+.github
+.workbuddy
+
+# 运行时数据（挂卷覆盖，不该进镜像）
+data/
+**/*.db
+**/*.db-wal
+**/*.db-shm
+
+# 密钥：绝不能进镜像层
+.env
+.env.local
+.env.*
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/venv/
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+
+# Node
+**/node_modules/
+**/dist/
+**/.vite/
+
+# 日志与编辑器
+logs/
+**/*.log
+tmp/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 文档与评测产物（镜像不需要）
+# 注意：这里不能排除 *.md —— sample-corpus/ 与 real-corpus/ 的语料就是 .md，
+# 镜像启动时要用它们给空知识库兜底。
+docs/
+eval/results/

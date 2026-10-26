@@ -16,8 +16,8 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from ..contracts.retrieval import Document, Snippet
 
@@ -110,7 +110,7 @@ class LocalCorpusRetriever:
         }
 
     @classmethod
-    def from_directory(cls, path: str | Path) -> "LocalCorpusRetriever":
+    def from_directory(cls, path: str | Path) -> LocalCorpusRetriever:
         root = Path(path)
         docs: list[Document] = []
         if root.is_dir():

@@ -11,6 +11,7 @@ from pathlib import Path
 from app.core.timeutil import utcnow
 from app.orchestrator.dag import build_report_graph
 from app.persistence import SqlTaskStore, build_engine, build_session_factory, create_schema
+from app.persistence.store import TaskExistsError
 
 
 class TestSqlTaskStore(unittest.TestCase):
@@ -28,7 +29,7 @@ class TestSqlTaskStore(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_duplicate_create_rejected(self) -> None:
-        with self.assertRaises(Exception):
+        with self.assertRaises(TaskExistsError):
             self.store.create_task(
                 task_id="t1", topic="储能", sections=3, graph=self.graph
             )

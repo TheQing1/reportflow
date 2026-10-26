@@ -22,8 +22,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from ..agents.base import parse_json_object
 from ..contracts.llm import LLMClient, LLMMessage, LLMRequest

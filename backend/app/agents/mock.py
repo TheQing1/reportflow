@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 from ..contracts.agent import AgentContext
 from ..contracts.nodes import NodeType

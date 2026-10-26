@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 import tempfile
 import unittest
@@ -120,10 +119,8 @@ class ApiTest(unittest.TestCase):
         with_rev = self.client.post(
             "/api/tasks", json={**body, "task_id": "with-rev", "review": True}
         ).json()
-        kinds = lambda tid: [
-            n["type"]
-            for n in self.client.get(f"/api/tasks/{tid}").json()["nodes"]
-        ]
+        def kinds(tid: str) -> list[str]:
+            return [n["type"] for n in self.client.get(f"/api/tasks/{tid}").json()["nodes"]]
         self.assertNotIn("review", kinds(plain["task_id"]))
         self.assertIn("review", kinds(with_rev["task_id"]))
 
@@ -163,7 +160,7 @@ class ApiTest(unittest.TestCase):
         before = self.client.get("/api/corpus").json()["chunks"]
         res = self.client.post(
             "/api/corpus/upload",
-            files={"files": ("我的笔记.md", "# 我的笔记\n\n2026 年内部目标装机 9.9GWh。\n".encode("utf-8"))},
+            files={"files": ("我的笔记.md", "# 我的笔记\n\n2026 年内部目标装机 9.9GWh。\n".encode())},
         )
         self.assertEqual(res.status_code, 200)
         data = res.json()
@@ -185,7 +182,7 @@ class ApiTest(unittest.TestCase):
     def test_delete_removes_document(self) -> None:
         up = self.client.post(
             "/api/corpus/upload",
-            files={"files": ("临时.md", "# 临时\n\n待删除。".encode("utf-8"))}
+            files={"files": ("临时.md", "# 临时\n\n待删除。".encode())}
         ).json()
         doc_id = up["uploaded"][0]["doc_id"]
         res = self.client.delete(f"/api/corpus/{doc_id}").json()

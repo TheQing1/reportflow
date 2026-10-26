@@ -9,9 +9,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker

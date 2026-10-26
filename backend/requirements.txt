@@ -1,0 +1,19 @@
+# ReportFlow 后端运行时依赖
+#
+# 与 pyproject.toml 的 [project.dependencies] 保持一致。保留两份的原因：
+#   - pip install -e .  走 pyproject（含包元数据）
+#   - pip install -r requirements.txt  走本文件（Docker / CI 只需装依赖，不需要打包）
+#
+# 版本策略：下界保证功能，上界锁死大版本。
+# 本项目自带 40 主题标注评测集，依赖大版本漂移会让历史基线不可复现
+# （详见 docs/ARCHITECTURE.md「技术选型」）。
+#
+# 刻意不引入：openai SDK、向量数据库、分词库 —— 只用 OpenAI 兼容的 HTTP 接口。
+SQLAlchemy>=2.0,<3.0
+httpx>=0.25,<1.0
+fastapi>=0.104,<1.0
+uvicorn>=0.24,<1.0
+# 评测数据集（eval/topics/*.yaml）读写。缺失时 import 阶段才炸
+PyYAML>=6.0,<7.0
+# FastAPI 文件上传必需。缺失时启动不报错，首次上传才抛 RuntimeError
+python-multipart>=0.0.9,<0.1.0

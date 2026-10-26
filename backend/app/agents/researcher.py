@@ -15,7 +15,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 from ..contracts.agent import AgentContext
 from ..contracts.handoff import Fact, HandoffError, ResearchPacket
@@ -50,8 +51,8 @@ _BUDGET_DISCOUNT = 0.5
 
 
 def _rerank_by_budget(
-    hits: list["Snippet"], budget: set[str], *, limit: int
-) -> list["Snippet"]:
+    hits: list[Snippet], budget: set[str], *, limit: int
+) -> list[Snippet]:
     """按文档预算重排：预算内的保持原分，预算外的打折。
 
     不是硬过滤——硬过滤会让某章在预算文档不够相关时拿到一堆低质片段，

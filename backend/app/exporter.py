@@ -6,8 +6,8 @@ CLI 和 HTTP 接口都要用同一份拼装逻辑——分开实现必然会在�
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Iterable, Mapping
 
 from .contracts.task import NodeState, TaskState
 

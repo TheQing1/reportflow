@@ -15,8 +15,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import replace
-from typing import Mapping
 
 from ..contracts.llm import (
     LLMBadResponse,
@@ -26,9 +26,9 @@ from ..contracts.llm import (
     LLMRequest,
     LLMResponse,
     LLMTransient,
+    LLMTransport,
     LLMUnavailable,
     LLMUsage,
-    LLMTransport,
     ModelPrice,
 )
 from ..contracts.tracing import NullRecorder, Span, SpanRecorder, current_span_context

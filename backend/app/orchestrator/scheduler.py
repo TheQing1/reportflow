@@ -17,9 +17,10 @@ import json
 import time
 import uuid
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import timedelta
-from typing import Any, Mapping
+from typing import Any
 
 from ..contracts.agent import AgentContext, AgentRegistry
 from ..contracts.nodes import FAILURE_STATES, Graph, NodeStatus, NodeType, is_terminal

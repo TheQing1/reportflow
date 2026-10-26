@@ -20,23 +20,22 @@ from pathlib import Path
 from .agents import MockAgentConfig
 from .assembler import Runtime, build_runtime
 from .checkup import check_report, render_check
-from .exporter import build_report
-from .rag.store import CorpusStore, SAMPLE_DIR
+from .contracts.llm import LLMBadResponse, LLMMessage, LLMRequest, LLMUnavailable
 from .contracts.nodes import NodeStatus
 from .contracts.task import NodeState, TaskStatus
 from .core.config import PROJECT_ROOT, Settings
 from .core.logging import setup_logging
 from .core.timeutil import iso
+from .exporter import build_report
 from .llm import (
     CacheMode,
     LLMGateway,
     OpenAICompatibleTransport,
-    ReplayMiss,
     cache_summary,
     count_files,
 )
-from .contracts.llm import LLMBadResponse, LLMMessage, LLMRequest, LLMUnavailable
 from .rag import LocalCorpusRetriever
+from .rag.store import CorpusStore
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -611,7 +610,7 @@ def cmd_corpus(args: argparse.Namespace) -> int:
                 print("或把自己的 .md/.txt 直接放进该目录。")
         else:
             print(f"知识库非空，未覆盖：{settings.docs_dir}（{total} 篇）")
-            print(f"要重置示例库：python -m app.cli corpus init --force")
+            print("要重置示例库：python -m app.cli corpus init --force")
         return EXIT_OK
 
     if args.corpus_cmd == "ls":

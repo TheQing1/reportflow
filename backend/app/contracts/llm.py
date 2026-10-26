@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class LLMError(RuntimeError):
@@ -52,7 +53,7 @@ class LLMRequest:
     #: 仅用于日志与计费归因，不参与请求
     tag: str = ""
 
-    def with_model(self, model: str) -> "LLMRequest":
+    def with_model(self, model: str) -> LLMRequest:
         return LLMRequest(
             messages=self.messages,
             model=model,

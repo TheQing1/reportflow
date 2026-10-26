@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def utcnow() -> datetime:
@@ -13,7 +13,7 @@ def utcnow() -> datetime:
     保留微秒是必须的——节点耗时普遍在百毫秒级，截断到秒会让
     状态表里的 duration 全是 0 或 1000ms。
     """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def fmt(dt: datetime | None) -> str:

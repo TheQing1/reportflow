@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-from typing import Sequence
+from collections.abc import Sequence
 
 from ..contracts.retrieval import Retriever
 

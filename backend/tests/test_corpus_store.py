@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.rag.store import CorpusStore, SAMPLE_DIR, sanitize_filename
+from app.rag.store import SAMPLE_DIR, CorpusStore, sanitize_filename
 
 
 class SanitizeTest(unittest.TestCase):
@@ -36,13 +36,13 @@ class CorpusStoreTest(unittest.TestCase):
         self.store = CorpusStore(self.tmp)
 
     def test_save_strips_extension_from_doc_id(self) -> None:
-        doc_id, note = self.store.save("报告.md", "# 报告\n\n内容".encode("utf-8"))
+        doc_id, note = self.store.save("报告.md", "# 报告\n\n内容".encode())
         self.assertEqual(doc_id, "报告")
         self.assertEqual(note, "已保存")
 
     def test_same_name_is_renamed_not_overwritten(self) -> None:
-        first, _ = self.store.save("笔记.md", "# 第一版\n\n旧内容".encode("utf-8"))
-        second, note = self.store.save("笔记.md", "# 第二版\n\n新内容".encode("utf-8"))
+        first, _ = self.store.save("笔记.md", "# 第一版\n\n旧内容".encode())
+        second, note = self.store.save("笔记.md", "# 第二版\n\n新内容".encode())
         self.assertNotEqual(first, second)
         self.assertIn("另存为", note)
         # 旧内容必须还在：覆盖会让已有任务的引用悄悄换掉
@@ -57,7 +57,7 @@ class CorpusStoreTest(unittest.TestCase):
             self.store.save("大文件.md", b"x" * (2 * 1024 * 1024 + 1))
 
     def test_delete_and_list(self) -> None:
-        doc_id, _ = self.store.save("临时.md", "# 临时\n\n待删除".encode("utf-8"))
+        doc_id, _ = self.store.save("临时.md", "# 临时\n\n待删除".encode())
         self.assertIn(doc_id, [d["doc_id"] for d in self.store.list_docs()])
         self.assertTrue(self.store.delete(doc_id))
         self.assertFalse(self.store.delete(doc_id), "重复删除应返回 False")
@@ -74,7 +74,7 @@ class CorpusStoreTest(unittest.TestCase):
 
     @unittest.skipUnless(SAMPLE_DIR.is_dir(), "示例语料目录不存在")
     def test_ensure_does_not_overwrite_existing(self) -> None:
-        self.store.save("自建.md", "# 自建\n\n我自己的资料".encode("utf-8"))
+        self.store.save("自建.md", "# 自建\n\n我自己的资料".encode())
         self.store.ensure()
         self.assertIn("自建", [d["doc_id"] for d in self.store.list_docs()])
         self.assertEqual(

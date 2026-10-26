@@ -118,7 +118,7 @@ class CaseMetrics:
         }
 
     @classmethod
-    def from_dict(cls, raw: dict) -> "CaseMetrics":
+    def from_dict(cls, raw: dict) -> CaseMetrics:
         """断点续跑用：从落盘的 JSON 还原。"""
         return cls(
             case_id=raw["case_id"],

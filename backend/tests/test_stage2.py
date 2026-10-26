@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import shutil
 import tempfile
 import unittest
@@ -24,7 +23,6 @@ from app.agents.writer import WriterAgent
 from app.assembler import build_runtime
 from app.contracts.agent import AgentContext, AgentRegistry
 from app.contracts.handoff import (
-    ChapterDraft,
     Fact,
     HandoffError,
     ResearchPacket,
@@ -41,8 +39,8 @@ from app.contracts.llm import (
     LLMUsage,
 )
 from app.contracts.nodes import NodeSpec, NodeType
-from app.contracts.task import TaskStatus
 from app.contracts.retrieval import Document
+from app.contracts.task import TaskStatus
 from app.core.config import Settings
 from app.llm import LLMGateway, ScriptedLLM, json_handler
 from app.rag import LocalCorpusRetriever

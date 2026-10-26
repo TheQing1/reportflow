@@ -18,12 +18,12 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
 from .contracts.llm import LLMClient
 from .contracts.retrieval import Retriever
-from .evaluation.semantic import Assertion, SupportAuditor, sample_assertions
+from .evaluation.semantic import SupportAuditor, sample_assertions
 
 #: 带量纲的数字。定位"这段话的数据到底出自哪篇"就靠它。
 _UNIT_NUMBER = re.compile(
