@@ -30,6 +30,8 @@ h1 { font-size: 20px; margin: 0 0 4px; }
 h2 { font-size: 15px; margin: 0 0 10px; }
 h3 { font-size: 14px; margin: 16px 0 8px; }
 .muted { color: var(--muted); font-size: 12px; }
+/* 降级提示：检索档位没说谎，但和配置不一致时必须显眼，否则会找错排查方向 */
+.warn { color: #b45309; }
 
 .panel {
   background: var(--panel);

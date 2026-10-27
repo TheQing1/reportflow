@@ -23,7 +23,7 @@ from app.evaluation.report import (
     must_cite_hit,
 )
 from app.llm import ScriptedLLM, json_handler
-from app.orchestrator.dag import build_report_graph
+from app.orchestrator.graph_langgraph import build_report_graph
 
 
 class TestReportMetrics(unittest.TestCase):

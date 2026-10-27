@@ -26,7 +26,7 @@ from .persistence import (
     build_session_factory,
     create_schema,
 )
-from .rag import LocalCorpusRetriever
+from .rag import build_retriever
 
 SUPPORTED_PROFILES = ("mock", "real")
 
@@ -130,9 +130,17 @@ def build_runtime(
             )
             if judge_llm is not None:
                 log.info("判官模型已独立：%s（生成用 %s）", settings.llm_judge_model, settings.llm_model_primary)
-        used_retriever = retriever or LocalCorpusRetriever.from_directory(
-            settings.docs_dir
+        # 三档检索走同一条装配路径（见 rag/corpus.py:build_retriever）：
+        # bm25 就是原来那个对象；hybrid/vector 内部仍以 BM25 的片段表为文本权威。
+        # 注意这里**不能**在检索模式配置错误时静默兜底——build_retriever 会抛错，
+        # 让配错的人在启动时就看见，而不是跑完一份质量莫名下降的报告才发现。
+        used_retriever = retriever or build_retriever(
+            mode=settings.retrieval_mode,
+            docs_dir=settings.docs_dir,
+            settings=settings,
         )
+        if mode_desc := getattr(used_retriever, "describe", None):
+            log.info("检索模式：%s", mode_desc())
         if used_retriever.corpus_size() == 0:
             log.warning(
                 "知识库为空（%s）：Researcher 会返回空素材包，正文将全部是「资料未涉及」",

@@ -84,7 +84,7 @@ def create_app(
     rt = runtime or build_runtime(settings, profile="real", announce=True)
     log = get_logger("api")
 
-    app = FastAPI(title="ReportFlow", version="0.5.0")
+    app = FastAPI(title="ReportFlow", version="0.6.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(cors_origins),
@@ -108,6 +108,10 @@ def create_app(
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
         retriever = rt.retriever
+        # 检索模式要如实报告**实际生效**的那一档：hybrid 配了却没 key 时会降级成
+        # bm25，这里必须显示降级后的结果与原因，否则界面上写着 hybrid 而实际在跑
+        # 关键词检索，排查时会完全找错方向。
+        effective = getattr(retriever, "effective_mode", None)
         return {
             "ok": True,
             "llm_mode": rt.llm_mode,
@@ -115,6 +119,14 @@ def create_app(
             "profile": rt.profile,
             "corpus_chunks": retriever.corpus_size() if retriever else 0,
             "review_in_pipeline": settings.review_in_pipeline,
+            "retrieval_mode": settings.retrieval_mode,
+            "retrieval_effective": effective or settings.retrieval_mode,
+            "retrieval_degraded": str(
+                getattr(retriever, "degraded_reason", "") or ""
+            ),
+            "embedding_model": settings.embedding_model
+            if (effective or settings.retrieval_mode) != "bm25"
+            else "",
         }
 
     # ---------------------------------------------------------------- 任务

@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reportflow-backend"
-version = "0.5.0"
-description = "ReportFlow 后端：DAG 编排的多 Agent 研报生成流水线"
+version = "0.6.0"
+description = "ReportFlow 后端：LangGraph 编排的多 Agent 研报生成流水线"
 requires-python = ">=3.11"
 # 阶段一：SQLAlchemy（状态落库）
 # 阶段二：httpx（调 OpenAI 兼容接口）
 # 阶段四：FastAPI + uvicorn（HTTP 与 SSE）
-# 刻意不引入 openai SDK / 向量库 / 分词库，见 docs/ARCHITECTURE.md §9
+# 阶段五：LangGraph（StateGraph / Checkpointer / Send），替换自研 DAG
+# 刻意不引入 openai SDK / 向量数据库 / 分词库，见 docs/ARCHITECTURE.md §9
 dependencies = [
     "SQLAlchemy>=2.0",
     "httpx>=0.25",
@@ -21,6 +22,11 @@ dependencies = [
     # FastAPI 文件上传（POST /api/corpus/upload）必需。
     # 缺了它不会在启动时报错，而是第一次上传才抛 RuntimeError —— 极易被漏掉
     "python-multipart>=0.0.9",
+    # 编排：StateGraph + Checkpointer + Send 动态并行 + RetryPolicy。
+    # 只用到 langchain-core 的基础抽象，不引入 langchain 的链与 SDK
+    "langgraph>=0.6,<0.7",
+    "langgraph-checkpoint>=3.0,<4.0",
+    "langgraph-checkpoint-sqlite>=3.0,<4.0",
 ]
 
 [project.optional-dependencies]
@@ -96,4 +102,8 @@ addopts = "-ra --strict-markers"
 # 硬性阈值会让 CI 因无关改动变红，反而培养「无视红灯」的习惯。
 filterwarnings = [
     "ignore::DeprecationWarning",
+    # langgraph 上游自己的 PendingDeprecation：它在 import 期就发，
+    # 我们无法从调用侧传参消除（JsonPlusSerializer 还不接受 allowed_objects）。
+    # 等上游正式改默认值后这条会自动失效，届时可删。
+    "ignore::langchain_core._api.deprecation.LangChainPendingDeprecationWarning",
 ]

@@ -45,6 +45,21 @@ const badDocs = computed(() => {
 
 const running = computed(() => task.value?.status === 'RUNNING' || task.value?.status === 'PENDING')
 
+/**
+ * 检索档位的人读标签。
+ *
+ * 显示「生效」档而不是「配置」档：hybrid 没配 embedding key 时会降级成 bm25，
+ * 界面上如果照着配置显示 hybrid，会让人以为向量检索在跑，实际在跑关键词——
+ * 排查「为什么召回没变好」时会白走一大圈。降级原因由后端一起给。
+ */
+const retrievalLabel = computed(() => {
+  const h = health.value
+  if (!h) return '-'
+  const effective = h.retrieval_effective || h.retrieval_mode || 'bm25'
+  const model = h.embedding_model ? ` + ${h.embedding_model}` : ''
+  return `${effective}${model}`
+})
+
 async function refreshHealth() {
   try {
     health.value = await api.health()
@@ -209,7 +224,12 @@ onUnmounted(() => stopStream?.())
       </div>
       <div v-if="health" class="muted" style="text-align: right">
         <div>模式 {{ health.llm_mode }} · 判官 {{ health.judge_model }}</div>
-        <div>知识库 {{ health.corpus_chunks }} 片段 · review 循环 {{ health.review_in_pipeline ? '开' : '关' }}</div>
+        <div>
+          检索 {{ retrievalLabel }}
+          <span v-if="health.retrieval_degraded" class="warn">（已降级）</span>
+          · 知识库 {{ health.corpus_chunks }} 片段
+        </div>
+        <div>review 循环 {{ health.review_in_pipeline ? '开' : '关' }}</div>
       </div>
     </div>
   </header>

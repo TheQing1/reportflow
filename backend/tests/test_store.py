@@ -9,7 +9,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from app.core.timeutil import utcnow
-from app.orchestrator.dag import build_report_graph
+from app.orchestrator.graph_langgraph import build_report_graph
 from app.persistence import SqlTaskStore, build_engine, build_session_factory, create_schema
 from app.persistence.store import TaskExistsError
 
