@@ -69,3 +69,6 @@ eval/results/*/*
 
 # 会话记忆（agent 内部工作日志）。只存在于本地，不进版本库。
 .workbuddy/
+
+# 临时提交信息文件（git commit -F 用的）
+_msg*.txt
