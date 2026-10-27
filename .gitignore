@@ -18,6 +18,11 @@ htmlcov/
 *.db
 *.db-wal
 *.db-shm
+# LangGraph 的 checkpoint 库：与任务库同目录、同生命周期，属于运行时副产物
+# （*.db 匹配不到 .db.checkpoints 这个后缀，必须显式写）
+*.db.checkpoints
+*.db.checkpoints-wal
+*.db.checkpoints-shm
 *.sqlite3
 data/chroma/
 # 运行时知识库。用 `docs*` 而不是 `docs/`：换语料做验证时会另建
@@ -28,6 +33,10 @@ data/output/
 # LLM 录制缓存：默认不入库（模型产出物、体积随主题增长）。
 # 若想让全队/CI 离线回放同一批结果，可显式 `git add -f data/llm_cache/<kk>/*.json`
 data/llm_cache/
+# 向量索引：由语料 + embedding 模型即时重建，属于运行时副产物。
+# 默认落 data/vector_index；显式写出来是因为上面只有 data/docs*/ 与 data/llm_cache/，
+# 漏了它会把几百 KB 的浮点数组提交进版本库，且换语料后必然过期。
+data/vector_index/
 
 # 前端
 node_modules/

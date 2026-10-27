@@ -10,8 +10,8 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from app.agents.researcher import _rerank_by_budget
-from app.contracts.retrieval import Document
+from app.agents.researcher import _looks_like_rrf, _rerank_by_budget
+from app.contracts.retrieval import Document, Snippet
 from app.rag.budget import allocate_doc_budgets, overlap
 from app.rag.corpus import LocalCorpusRetriever
 
@@ -79,6 +79,73 @@ class RerankTest(unittest.TestCase):
 
         hits = asyncio.run(go())
         self.assertEqual(len(_rerank_by_budget(hits, {"doc_a"}, limit=2)), 2)
+
+
+class RrfScaleTest(unittest.TestCase):
+    """RRF 分数尺度下的降权语义。
+
+    BM25 与 RRF 的量纲差了两个数量级：BM25 相邻名次相对差 20%~50%，
+    RRF 只有 1.6%（k=60）。如果两档共用"乘 0.5"，RRF 档会把预算外片段
+    推到 60 名开外——降权退化成硬过滤，与 budget 的设计意图相反。
+    这一组用例把"RRF 档必须仍是降权、不是过滤"钉住。
+    """
+
+    @staticmethod
+    def _rrf_hits() -> list[Snippet]:
+        # 真实 RRF 量级：两路融合后单片段不超过 2/61 ≈ 0.0328
+        return [
+            Snippet(doc_id="budget_a", title="a", page=None, text="x", score=2 / 61),
+            Snippet(doc_id="free_b", title="b", page=None, text="y", score=1 / 62),
+            Snippet(doc_id="free_c", title="c", page=None, text="z", score=1 / 63),
+        ]
+
+    def test_scale_detection(self) -> None:
+        self.assertTrue(_looks_like_rrf([s.score for s in self._rrf_hits()]))
+        # BM25 原始分不应被误判成 RRF
+        self.assertFalse(_looks_like_rrf([20.5, 9.7, 6.7]))
+        self.assertFalse(_looks_like_rrf([]))
+
+    def test_budget_doc_moves_up_not_necessarily_first(self) -> None:
+        """预算内片段位次前移，但不保证置顶。
+
+        与 BM25 档同一条语义：降权是"优先"，不是"独占"。
+        预算内片段本身分低时，仍可能排在后面——这正是刻意保留的行为，
+        硬置顶会让某章拿到一堆低相关片段，反而伤覆盖率。
+        """
+        # budget_a 原本第 1；把最末位的 free_c 设为预算内，它应前移
+        hits = self._rrf_hits()
+        before = [s.doc_id for s in hits].index("free_c")
+        out = _rerank_by_budget(hits, {"free_c"}, limit=3)
+        after = [s.doc_id for s in out].index("free_c")
+        self.assertLess(after, before)
+
+    def test_low_scoring_budget_doc_stays_put_but_is_kept(self) -> None:
+        """预算内片段本身分很低时不会被强行置顶，但绝不会被丢弃。"""
+        hits = [
+            Snippet(doc_id="free1", title="1", page=None, text="a", score=2 / 61),
+            Snippet(doc_id="free2", title="2", page=None, text="b", score=1 / 62),
+            Snippet(doc_id="bud1", title="3", page=None, text="c", score=1 / 70),
+        ]
+        out = _rerank_by_budget(hits, {"bud1"}, limit=3)
+        self.assertEqual(len(out), 3, "硬过滤会丢片段，这里必须保留")
+        self.assertEqual({s.doc_id for s in out}, {"free1", "free2", "bud1"})
+
+    def test_non_budget_docs_are_not_hard_filtered(self) -> None:
+        """降权后预算外片段仍必须留在结果里（这是与硬过滤的分界线）。"""
+        hits = self._rrf_hits()
+        out = _rerank_by_budget(hits, {"free_c"}, limit=3)
+        self.assertEqual(len(out), 3)
+        self.assertEqual({s.doc_id for s in out}, {"budget_a", "free_b", "free_c"})
+
+    def test_naive_halving_would_have_dropped_everything(self) -> None:
+        """把"分数字面乘 0.5"的错误做法显式记下来，防有人改回去。
+
+        RRF 下 1/(60+61) > (1/(60+1)) * 0.5，即预算内第 61 名仍压过预算外第 1 名。
+        """
+        k = 60
+        worst_in_budget = 1 / (k + 61)
+        best_out_budget_halved = (1 / (k + 1)) * 0.5
+        self.assertGreater(worst_in_budget, best_out_budget_halved)
 
 
 if __name__ == "__main__":

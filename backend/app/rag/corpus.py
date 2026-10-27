@@ -19,7 +19,7 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from ..contracts.retrieval import Document, Snippet
+from ..contracts.retrieval import Document, Retriever, Snippet
 
 _ASCII_WORD = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._%-]*")
 _CJK = re.compile(r"[\u4e00-\u9fff]")
@@ -129,8 +129,15 @@ class LocalCorpusRetriever:
         """重新读取目录（上传/删除文档后必须调用）。返回片段数。
 
         没有它的话，上传完还得重启服务才能检索到——那会让人以为上传失败了。
+
+        没有 `root` 的实例（直接用文档列表构造的，测试与混合检索内部会这么用）
+        没有目录可重读，此时返回当前片段数而不是抛 AttributeError：
+        调用方只关心"现在有多少片段"，而不是"有没有目录"。
         """
-        rebuilt = type(self).from_directory(self.root)
+        root = getattr(self, "root", None)
+        if root is None:
+            return len(self._chunks)
+        rebuilt = type(self).from_directory(root)
         self._chunks = rebuilt._chunks
         self._tokens = rebuilt._tokens
         self._idf = rebuilt._idf
@@ -140,6 +147,15 @@ class LocalCorpusRetriever:
 
     def corpus_size(self) -> int:
         return len(self._chunks)
+
+    def chunks(self) -> list[Document]:
+        """片段清单（逐字原文）。
+
+        混合检索要靠它做两件事：给向量索引用同一批切片（否则 BM25 与向量的
+        "片段身份"对不上，融合就是两张皮），以及返回结果时从这里取文本——
+        保证输出永远是当前语料的原文，而不是索引文件里的旧副本。
+        """
+        return list(self._chunks)
 
     def full_text(self, doc_id: str) -> str:
         """按 doc_id 拼回整篇原文（chunk 顺序即原文顺序）。"""
@@ -211,3 +227,50 @@ def load_documents(paths: Sequence[str | Path]) -> list[Document]:
                     Document(doc_id=file.stem, title=_first_heading(text) or file.stem, text=text)
                 )
     return docs
+
+
+def build_retriever(
+    mode: str | None = None,
+    *,
+    docs_dir: str | Path | None = None,
+    settings: object | None = None,
+    embedder: object | None = None,
+    index_dir: str | Path | None = None,
+    rrf_k: int | None = None,
+) -> Retriever:
+    """按模式造检索器。三档共用一条装配路径，避免上层出现 if/else 分叉。
+
+    - `bm25`   → 就是原来的 `LocalCorpusRetriever`（默认档，向后兼容）
+    - `vector` / `hybrid` → `HybridRetriever`，内部仍持有 BM25 做文本权威
+
+    没配 `EMBEDDING_API_KEY` 时**不报错**，而是返回降级为 BM25 的
+    `HybridRetriever`：知识库功能不该因为缺一项配置就整体起不来。
+
+    刻意保持**同步**：装配层（assembler / api）本来就是同步代码，
+    向量索引改为在第一次 `search()` 时惰性构建，这样这里不需要 async 签名。
+    """
+    # 延迟导入：hybrid 依赖 corpus，顶层互 import 会成环
+    from ..core.config import Settings
+    from .embedding import build_embedder
+    from .hybrid import DEFAULT_RRF_K, VALID_MODES, HybridRetriever
+
+    cfg = settings if settings is not None else Settings.load()
+    resolved_mode = (mode or getattr(cfg, "retrieval_mode", "bm25") or "bm25").strip().lower()
+    if resolved_mode not in VALID_MODES:
+        raise ValueError(f"未知的检索模式 {resolved_mode!r}（可选 {' / '.join(VALID_MODES)}）")
+
+    root = docs_dir if docs_dir is not None else getattr(cfg, "docs_dir", "")
+    bm25 = LocalCorpusRetriever.from_directory(root)
+
+    if resolved_mode == "bm25":
+        return bm25
+
+    used_embedder = embedder if embedder is not None else build_embedder(cfg)
+    used_index_dir = index_dir if index_dir is not None else getattr(cfg, "vector_index_dir", "")
+    return HybridRetriever(
+        bm25,
+        mode=resolved_mode,  # type: ignore[arg-type]
+        embedder=used_embedder,  # type: ignore[arg-type]
+        index_dir=used_index_dir or None,
+        rrf_k=int(rrf_k if rrf_k is not None else getattr(cfg, "rrf_k", DEFAULT_RRF_K)),
+    )

@@ -97,6 +97,20 @@ class Settings:
     # ---- 知识库 ----
     docs_dir: str = ""
 
+    # ---- 检索（混合检索）----
+    #: bm25 | vector | hybrid。默认 bm25：保持历史评测基线可复现。
+    retrieval_mode: str = "bm25"
+    embedding_base_url: str = "https://api.siliconflow.cn/v1"
+    embedding_api_key: str = ""
+    embedding_model: str = "BAAI/bge-m3"
+    embedding_timeout_s: float = 30.0
+    #: 批次大小。大部分 OpenAI 兼容端点单请求上限 32~128 条，32 保守可用。
+    embedding_batch_size: int = 32
+    #: RRF 融合的平滑常数。k=60 是原论文与工业界的默认值。
+    rrf_k: int = 60
+    #: 向量索引落盘目录。放 data/ 下，已被 .gitignore 覆盖。
+    vector_index_dir: str = ""
+
     @classmethod
     def load(cls, env_file: Path | None = None) -> Settings:
         file_env = _read_env_file(env_file or _find_env_file() or Path("/nonexistent"))
@@ -148,6 +162,17 @@ class Settings:
             ),
             llm_judge_extra=get("LLM_JUDGE_EXTRA_JSON", "").strip(),
             docs_dir=docs_dir,
+            retrieval_mode=get("RETRIEVAL_MODE", "bm25").strip().lower(),
+            embedding_base_url=get(
+                "EMBEDDING_BASE_URL", "https://api.siliconflow.cn/v1"
+            ).strip(),
+            embedding_api_key=get("EMBEDDING_API_KEY", "").strip(),
+            embedding_model=get("EMBEDDING_MODEL", "BAAI/bge-m3").strip(),
+            embedding_timeout_s=float(get("EMBEDDING_TIMEOUT", "30")),
+            embedding_batch_size=max(1, int(get("EMBEDDING_BATCH_SIZE", "32"))),
+            rrf_k=max(1, int(get("RRF_K", "60"))),
+            vector_index_dir=get("VECTOR_INDEX_DIR", "").strip()
+            or str(PROJECT_ROOT / "data" / "vector_index"),
         )
 
     def with_overrides(self, **kwargs: object) -> Settings:

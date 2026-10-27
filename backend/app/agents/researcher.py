@@ -48,18 +48,64 @@ def _norm(text: str) -> str:
 
 #: 预算外文档的得分折扣（与 scripts/measure_overlap.py 的实测一致：0.5 约 -14pp）
 _BUDGET_DISCOUNT = 0.5
+#: RRF 分数尺度下"等效于乘 0.5"的名次惩罚。
+#:
+#: 为什么不能两档共用一个 0.5：BM25 相邻名次的相对差约 20%~50%，乘 0.5 是
+#: "降权但仍可能翻盘"；而 RRF 的 1/(k+rank) 相邻名次只差 1.6%（k=60 时），
+#: 分数字面乘 0.5 会把一条片段从第 1 名推到第 61 名之外——任何预算内片段都会
+#: 无条件压过任何预算外片段，降权就成了硬过滤，与 budget.py 注释里
+#: "不是硬过滤，硬过滤反而伤覆盖率"的设计意图正好相反。
+#:
+#: 所以在 RRF 尺度下改为**名次惩罚**：预算外片段按 RRF 公式往后挪 -- penalty 名，
+#: 效果等价于"降权但仍可翻盘"。取 30 名：1/(60+1) 与 1/(60+31) 之比约 1.98，
+#: 与 BM25 档 0.5 的折扣强度基本对齐。
+_RRF_RANK_PENALTY = 30
+
+
+def _looks_like_rrf(scores: Sequence[float]) -> bool:
+    """判断这批分数是不是 RRF 融合分（而不是 BM25 原始分）。
+
+    RRF 单路贡献恒为 1/(k+rank)：k=60 时最大 1/61≈0.0164，两路融合后 < 0.033。
+    BM25 分数与之交集极小（实测单片段 0.5~30），所以用"全部 <= 0.05"判定足够安全，
+    且不需要让 agents 层认识 rag 层的具体实现（分层约束）。
+    """
+    return bool(scores) and all(s <= 0.05 for s in scores)
 
 
 def _rerank_by_budget(
-    hits: list[Snippet], budget: set[str], *, limit: int
+    hits: list[Snippet], budget: set[str], *, limit: int, rrf_k: int = 60
 ) -> list[Snippet]:
-    """按文档预算重排：预算内的保持原分，预算外的打折。
+    """按文档预算重排：预算内的保持原分，预算外的降权。
 
     不是硬过滤——硬过滤会让某章在预算文档不够相关时拿到一堆低质片段，
     反而伤覆盖率。这里是"优先但不独占"。
+
+    两种分数尺度用两种降权方式（见 `_RRF_RANK_PENALTY` 的注释）：
+    BM25 乘 0.5；RRF 改为名次惩罚，否则会退化成硬过滤。
     """
-    scored = [(sn.score * (_BUDGET_DISCOUNT if sn.doc_id not in budget else 1.0), i, sn)
-              for i, sn in enumerate(hits)]
+    scores = [float(sn.score) for sn in hits]
+    if _looks_like_rrf(scores):
+        # RRF 档：按**名次**降权，而不是给分数字面打折。
+        # 原因见 _RRF_RANK_PENALTY 的注释：RRF 相邻名次只差 1.6%，
+        # 分数字面乘 0.5 会把片段推到 60 名开外，降权退化成硬过滤。
+        #
+        # 做法：先按原分排名，预算外的名次往后挪 penalty 名，再按新名次
+        # 用 RRF 公式算分数。这样"预算内优先但不独占"的语义两档一致。
+        order = sorted(range(len(hits)), key=lambda i: (-scores[i], i))
+        new_rank: dict[int, int] = {}
+        shifted = 0
+        for pos, idx in enumerate(order, start=1):
+            if hits[idx].doc_id in budget:
+                new_rank[idx] = pos - shifted
+            else:
+                shifted += _RRF_RANK_PENALTY
+                new_rank[idx] = pos + _RRF_RANK_PENALTY
+        scored = [(1.0 / (rrf_k + new_rank[i]), i, sn) for i, sn in enumerate(hits)]
+    else:
+        scored = [
+            (sn.score * (_BUDGET_DISCOUNT if sn.doc_id not in budget else 1.0), i, sn)
+            for i, sn in enumerate(hits)
+        ]
     scored.sort(key=lambda x: (-x[0], x[1]))
     return [sn for _, _, sn in scored[:limit]]
 
