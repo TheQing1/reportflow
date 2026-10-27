@@ -102,8 +102,8 @@ class ReportState(TypedDict, total=False):
     reviews: Annotated[dict[str, dict[str, Any]], _merge_dict]
     #: 章号(str) -> 已打回轮数
     review_round: Annotated[dict[str, int], _merge_dict]
-    #: 章号(str) -> 本次 review 是否刚打回（条件边据此决定回写还是进下一章）
-    reopened: Annotated[dict[str, bool], _merge_dict]
+    #: 章号(str) -> 打回后该回到哪一层："write" / "research" / ""（通过）
+    reopened: Annotated[dict[str, str], _merge_dict]
     #: 打回次数用尽仍未通过的章节（任务终态要降级为 PARTIAL）
     unresolved: Annotated[list[str], operator.add]
     #: 节点最终失败的原因，便于事后归因
@@ -594,7 +594,7 @@ def compile_report_graph(
                     return {
                         "reviews": {str(chapter): data},
                         "review_round": {str(chapter): round_now},
-                        "reopened": {str(chapter): False},
+                        "reopened": {str(chapter): ""},
                     }
 
                 if round_now >= max_review_rounds:
@@ -610,7 +610,7 @@ def compile_report_graph(
                     return {
                         "reviews": {str(chapter): data},
                         "review_round": {str(chapter): round_now},
-                        "reopened": {str(chapter): False},
+                        "reopened": {str(chapter): ""},
                         _UNRESOLVED_KEY: [nid],
                     }
 
@@ -645,7 +645,14 @@ def compile_report_graph(
                     "review_round": {
                         str(chapter): after.review_round if after else round_now
                     },
-                    "reopened": {str(chapter): reopened},
+                    # 记下**回到哪一层**而不是简单的布尔：fix_target=research 时要回
+                    # research 节点，回 write 会让被重置的 research 再也没人触发。
+                    # 空字符串 = 通过，条件边据此前进去下一章。
+                    "reopened": {
+                        str(chapter): ("research" if target == "research" else "write")
+                        if reopened
+                        else ""
+                    },
                 }
 
             return review_node
@@ -673,11 +680,12 @@ def compile_report_graph(
     # ---------------------------------------------------------------- 边
 
     def wire_chapter(chapter: int, forward: Any) -> None:
-        """串一章的尾部：write → review →（打回则回 write / 否则 forward）。
+        """串一章的尾部：write → review →（打回则回写/重检 / 否则 forward）。
 
         `forward` 是"本章通过后去哪"：串行尾部是下一章的 write，流水线模式是汇合点。
         """
         write_id = f"write_ch{chapter}"
+        research_id = f"research_ch{chapter}"
         if not with_review:
             # 评测 B 组（多 Agent 无 Reviewer）：串行链直接挂在 write 上，
             # 保证与 C 组只有"有没有 review"这一个变量不同
@@ -688,12 +696,20 @@ def compile_report_graph(
         builder.add_edge(write_id, review_id)
 
         def route(state: ReportState) -> Any:
-            if state.get("reopened", {}).get(str(chapter)):
+            action = state.get("reopened", {}).get(str(chapter))
+            if action == "write":
                 # 条件回边：打回就回到本章 write，形成写-审-改闭环
                 return write_id
+            if action == "research":
+                # fix_target=research：重检。**必须回到 research 而不是 write**，
+                # 否则 research 被重置为 PENDING 却再没人触发它（它在图上唯一的
+                # 入边来自 planner，而 planner 早已完成），write 的闸门就一直
+                # 等不到依赖，review 反复重试直到撞上 recursion_limit。
+                # 实测踩到：C 档 fix_target=research 时 200 步后抛 GraphRecursionError。
+                return research_id
             return forward
 
-        builder.add_conditional_edges(review_id, route, [write_id, forward])
+        builder.add_conditional_edges(review_id, route, [write_id, research_id, forward])
 
     builder.add_edge(START, "planner")
     research_nodes = [f"research_ch{i}" for i in range(1, sections + 1)]

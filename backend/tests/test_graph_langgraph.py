@@ -396,8 +396,10 @@ class TestResume(GraphTestBase):
 class _ReviseAgents:
     """review 前 N 次判 revise，之后 pass。用来验证打回闭环能否收敛。"""
 
-    def __init__(self, *, revise_times: int) -> None:
+    def __init__(self, *, revise_times: int, fix_target: str = "write") -> None:
         self.revise_times = revise_times
+        #: "write" 改稿 / "research" 重新检索。后者是踩过死循环的那条路径。
+        self.fix_target = fix_target
         self.review_calls: dict[int, int] = {}
         self.write_calls: dict[int, int] = {}
 
@@ -450,10 +452,10 @@ class _ReviseAgents:
                             "type": "assertion_mismatch",
                             "claim": f"第{ch}章要点",
                             "reason": "与原文不一致（模拟）",
-                            "fix_target": "write",
+                            "fix_target": self.fix_target,
                         }
                     ],
-                    "fix_target": "write",
+                    "fix_target": self.fix_target,
                     "hint": "请按原文修正数字",
                 }
             return {"chapter": ch, "verdict": "pass", "defects": []}
@@ -515,6 +517,41 @@ class TestRevisionLoop(GraphTestBase):
         rt, task_id, _ = self._run(agents)
         nodes = {n.node_id: n for n in rt.store.list_nodes(task_id)}
         self.assertEqual(nodes["research_ch1"].attempt, 1)
+
+    def test_fix_target_research_terminates_instead_of_looping(self) -> None:
+        """fix_target=research 必须能收敛，不能撞上 recursion_limit。
+
+        这是评测 C 档实测暴露的真 bug：打回时把 `research_ch{i}` 重置成 PENDING，
+        但条件边只回到 `write_ch{i}`——而 research 在图上唯一的入边来自 planner，
+        planner 早已完成、不会再触发它。于是 research 永久 PENDING，write 的闸门
+        一直等不到依赖、review 反复重试，跑满 200 步后抛 `GraphRecursionError`。
+        表现是整条 C 档某主题直接 ERROR，且只有"建议重检"这一小部分样本会中招，
+        很容易被当成偶发。
+
+        修法：条件边记录"回到哪一层"，fix_target=research 时回到 research 节点。
+        """
+        agents = _ReviseAgents(revise_times=1, fix_target="research")
+        rt, task_id, result = self._run(agents)
+
+        nodes = {n.node_id: n for n in rt.store.list_nodes(task_id)}
+        # 关键断言：所有节点都到达终态，没有卡在 PENDING
+        pending = [k for k, n in nodes.items() if n.status is NodeStatus.PENDING]
+        self.assertEqual(pending, [], f"仍有节点卡在 PENDING: {pending}")
+        self.assertIs(result.task_status, TaskStatus.DONE)
+        # research 确实被重跑过一次（说明重检路径真的走通了，而不是被跳过）
+        self.assertEqual(nodes["research_ch1"].attempt, 2)
+        # 且整条链收敛：review 调用次数有限（1 次 revise + 1 次 pass）
+        self.assertEqual(agents.review_calls[1], 2)
+
+    def test_fix_target_research_gives_up_at_cap(self) -> None:
+        """一直判重检时也必须收敛到 PARTIAL，不能无限循环。"""
+        agents = _ReviseAgents(revise_times=99, fix_target="research")
+        rt, task_id, result = self._run(agents)
+        nodes = {n.node_id: n for n in rt.store.list_nodes(task_id)}
+        self.assertEqual(nodes["review_ch1"].review_round, 2)
+        self.assertIs(result.task_status, TaskStatus.PARTIAL)
+        pending = [k for k, n in nodes.items() if n.status is NodeStatus.PENDING]
+        self.assertEqual(pending, [], f"仍有节点卡在 PENDING: {pending}")
 
 
 class TestTopologyMatrix(GraphTestBase):

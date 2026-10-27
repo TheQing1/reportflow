@@ -50,8 +50,17 @@ logs/
 tmp/
 .DS_Store
 
-# 评测产物（可重跑生成；数据集本身要进版本库）
-eval/results/
+# 评测产物。明细（cases/*.json、results.json）体积大且可重跑生成，不入库；
+# 但 **report.md 是结论摘要，必须入库** —— README / 验收文档引用的每个数字
+# 都要能在仓库里查到，否则"这个数字哪来的"无法回答，读者只能选择相信或不相信。
+#
+# 注意 gitignore 的一条规则：父目录被排除后，git 就不会再进入它检查子文件，
+# 所以单写 `!eval/results/*/report.md` 是无效的 —— 必须先用 `*` 重新包含
+# 中间目录，再放行目标文件。
+eval/results/*
+!eval/results/*/
+eval/results/*/*
+!eval/results/*/report.md
 
 # 编辑器
 .idea/

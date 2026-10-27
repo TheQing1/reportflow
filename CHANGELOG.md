@@ -5,11 +5,19 @@
 
 ## [Unreleased]
 
-编排层换成 LangGraph，检索层从单一 BM25 扩成三档（默认不变），对外契约与评测基线口径刻意保持一致。
+编排层换成 LangGraph，检索层从单一 BM25 扩成三档（默认不变），并在新编排下重跑了 40 主题评测。
 详见 [docs/STAGE5_ACCEPTANCE.md](docs/STAGE5_ACCEPTANCE.md)。
 
 ### Added
 
+- **40 主题评测基线重跑**（`eval/results/v9-langgraph/`）：真实模型 + 跨厂商判官，
+  三档全部 40/40 成功。A/B/C 覆盖率 73.2% / 77.5% / 79.3%，语义支持率 93.3% / 98.2% / 99.8%。
+  与改造前 v6 三档绝对值同量级，说明换编排没有引入质量数量级变化
+  - **结论有一处变弱**：A→B 覆盖率提升本轮**不显著**（+4.3pp，CI 跨 0），
+    v6 曾测得 +7.7pp 显著。README 已据此改成「不能作为定论」。
+    语义支持率提升（+4.9pp）仍显著，这才是本架构的真实收益
+- **引擎评测产物入库策略**：`eval/results/` 整体忽略，但 `*/report.md` 例外入库——
+  README 引用的每个数字都要能在仓库里查到，否则「这数字哪来的」无法回答
 - **检索三档**：`RETRIEVAL_MODE=bm25|vector|hybrid`，`build_retriever(mode=...)` 统一装配，默认 `bm25`
   - `rag/embedding.py`：OpenAI 兼容 `/embeddings` 客户端，**独立于 LLM 的**录制回放缓存，键含模型名
   - `rag/vector_index.py`：纯 Python 余弦索引，带「模型名 + 全部 chunk 文本」指纹，落盘 `data/vector_index/`
@@ -17,8 +25,7 @@
   - 新配置项：`EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL`（默认 `BAAI/bge-m3`）/
     `EMBEDDING_TIMEOUT` / `EMBEDDING_BATCH_SIZE` / `RRF_K` / `VECTOR_INDEX_DIR`
 - **编排层依赖**：`langgraph>=0.6,<0.7`、`langgraph-checkpoint>=3.0,<4.0`、`langgraph-checkpoint-sqlite>=3.0,<4.0`
-- `docs/STAGE5_ACCEPTANCE.md`：迁移映射、踩坑与修正（barrier 边 / SystemExit 变 CancelledError /
-  serial_tail 判据错致默认配置只生成第 1 章 / 流水线 END 提前收工 / 闸门让路即卡死）、实测数据、未完成项
+- `docs/STAGE5_ACCEPTANCE.md`：迁移映射、六个踩坑与修正、重跑评测数据、未完成项
 - `tests/test_graph_langgraph.py::TestTopologyMatrix`：`serial_tail × with_review` 四种组合
   都必须把每一章跑完的回归矩阵（4 条），已做变异测试验证（注回旧判据后有 2 条立即失败）
 - `/api/health` 增加 `retrieval_mode` / `retrieval_effective` / `retrieval_degraded` / `embedding_model`；
@@ -61,15 +68,22 @@
 - **检索层的 RRF 尺度与下游预算折扣冲突**：`app/agents/researcher.py` 增加 `_looks_like_rrf()` 判定，
   RRF 档下把"分数乘 0.5"换成名次惩罚 `_RRF_RANK_PENALTY = 30`。
   RRF 相邻名次只差约 1.6%，字面乘 0.5 会把片段推出 61 名开外，降权会退化成硬过滤
+- **C 档 `fix_target=research` 的打回死循环**（重跑评测时才暴露，单测全绿没抓到）：
+  打回时把 `research_ch{i}` 重置为 PENDING，但条件边只回到 `write_ch{i}`——
+  而 research 在图上唯一的入边来自早已完成的 planner，于是它永久 PENDING、
+  review 反复重试，跑满 200 步抛 `GraphRecursionError`，整条用例变 ERROR。
+  修法：`reopened` 从布尔改成"回到哪一层"（`write` / `research` / 空），条件边按它分别回边。
+  新增 2 条回归用例并做变异测试验证（注掉 research 分支后有 2 条立即失败）
+- **评测报告硬编码"judge 与生成使用同一模型"**：与实际配置（跨厂商判官 GLM）矛盾，
+  会让读者误判结论可信度。改为按实际配置动态生成说明
 
 ### Known issues
 
-- 40 主题评测**未在 LangGraph 改造后重跑**。README「效果与代价」的数字仍是改造前的编排基线，
-  新基线需另起目录（如 `eval/results/v9-langgraph/`）重跑，不能与旧数据直接比
 - `vector` / `hybrid` 两档没有 40 主题三档量化对照，只有单主题实测；也没有"哪一路召回"的可视化
   （顶栏只显示实际生效档位与降级原因）
 - 流水线模式（`serial_tail=False`）的拓扑正确性已覆盖，但"各章确实重叠推进"没有时间重叠度断言
   ——串行档有，流水线档没有对应的量化口径
+- 评测只跑 1 次重复（与 v6 对齐以便对比），单主题覆盖率波动可达 20pp+，只看配对 CI 不看单主题分数
 
 ---
 

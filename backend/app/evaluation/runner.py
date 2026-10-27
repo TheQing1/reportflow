@@ -96,9 +96,14 @@ class EvalRunner:
         judge_model = getattr(settings, "llm_judge_model", "") or getattr(
             settings, "llm_model_primary", "?"
         )
+        #: 判官是否真的独立于生成模型。报告里的口径说明要按这个如实写，
+        #: 不能硬编码成「同一模型」——项目实际配的是跨厂商判官。
+        self.judge_independent = bool(getattr(settings, "llm_judge_model", "")) and (
+            judge_model != getattr(settings, "llm_model_primary", "")
+        )
         self.judge_label = (
             judge_model
-            if getattr(settings, "llm_judge_model", "")
+            if self.judge_independent
             else f"{judge_model}（与生成同模型，存在自我偏好）"
         )
         if judge_llm is None:
@@ -397,6 +402,7 @@ class EvalRunner:
                 self.repeats,
                 semantic_comparisons=semantic_comparisons,
                 judge_label=self.judge_label,
+                judge_independent=self.judge_independent,
             ),
             encoding="utf-8",
         )
@@ -471,6 +477,7 @@ def render_markdown(
     repeats: int = 1,
     semantic_comparisons: list[PairedResult] | None = None,
     judge_label: str = "",
+    judge_independent: bool = False,
 ) -> str:
     samples = {arm: _samples(ms, "coverage") for arm, ms in results.items()}
     case_counts = {arm: len(s) for arm, s in samples.items()}
@@ -608,7 +615,26 @@ def render_markdown(
         "因为「两章引用同一份资料但讲不同数据」是正常的，不该算进复读。"
         "前两轮去重实验以它为目标，是失败原因之一。",
         "- **事实错误**：judge 判定正文是否**主张**了 forbidden 中的错误说法，否定语境不算。",
-        "- judge 与生成使用同一模型，存在自我偏好风险；本轮不含人工校准，结论应保守解读。",
+        _judge_note(judge_label, judge_independent),
         "",
     ]
     return "\n".join(lines)
+
+
+def _judge_note(judge_label: str, independent: bool) -> str:
+    """按**实际配置**说明判官是否独立，而不是写死一句话。
+
+    原先这里硬编码「judge 与生成使用同一模型」，但项目实际一直配着跨厂商判官
+    （生成 DeepSeek / 判官 GLM）。报告里印着与配置相反的话，会让读者误判结论
+    的可信度——「文档说一套、配置是另一套」是最伤信任的细节。
+    """
+    if not independent:
+        return (
+            f"- judge 与生成使用同一模型（{judge_label or '未标注'}），存在自我偏好风险；"
+            "本轮不含人工校准，结论应保守解读。"
+        )
+    return (
+        f"- judge 与生成**分离**（判官：`{judge_label}`），已避开「自己给自己判卷」。"
+        "但仍不含人工校准，绝对分数可能偏乐观，"
+        "**结论应看档间相对差异，不要看绝对值**。"
+    )
