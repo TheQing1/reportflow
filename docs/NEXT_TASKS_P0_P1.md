@@ -1,17 +1,17 @@
-﻿# ReportFlow 后续任务清单（P0 / P1）
+# ReportFlow 后续任务清单（P0 / P1）
 
 > 本文件**自包含**：不依赖任何对话上下文，可直接复制到新对话交给其他模型独立执行。
 > 范围：仅 P0 与 P1。P2（框架关键词表述）与 P3（K8s / 分布式）本次不展开。
 
 ---
 
-## 执行状态（最后更新：T1 / T2 完成后）
+## 执行状态（最后更新：T1 / T2 / T3 全部完成后）
 
 | 任务 | 状态 | 验收记录 |
 |---|---|---|
-| T1【P0】编排替换：自研 DAG → LangGraph | **已完成** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) |
-| T2【P0】混合检索：BM25 + 向量 + RRF 融合 | **已完成** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) |
-| T3【P1】Function Calling / 联网检索工具 | **未开始**（依赖 T1，T1 已就绪） | — |
+| T1【P0】编排替换：自研 DAG → LangGraph | **已完成** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §3 |
+| T2【P0】混合检索：BM25 + 向量 + RRF 融合 | **已完成** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §4 |
+| T3【P1】Function Calling / 联网检索工具 | **已完成（默认关闭）** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §6.6 |
 
 几点与本文原计划**不同**的落地事实，读下文任务描述时请以这里为准：
 
@@ -20,7 +20,7 @@
    理由是"仓库里同时存在两套编排，面试官会质疑主链路到底是哪个"。
    旧实现见 git 历史。代价是这次迁移不可运行时降级，只能回滚到迁移前的 commit。
 2. **T1 的测试目标从"139 条不减少"变成了净增**：删掉 `test_dag.py`(9) 与 `test_scheduler.py`(7)
-   的同时新增 `test_graph_langgraph.py`(28)，全量从 139 → **260 passed**。
+   的同时新增 `test_graph_langgraph.py`(28)，全量从 139 → **320 passed**。
 3. **T2 的评测结论没有产出**。本文要求"用 40 主题评测集产出三档量化对照"，实际只做到
    "三档可用 + 离线可复现 + 单主题实测"；40 主题三档对比**未重跑**（LangGraph 改造后基线也一起缺），
    属已知未完成项。**不要**把历史基线数字当成 T2 的评测结论引用。
@@ -83,7 +83,7 @@ Planner 拆大纲 → Researcher 并行检索 → Writer 分章撰写 → Review
 > ⚠️ 上表是**开工前**的结构，保留作决策记录。T1 / T2 完成后有变化：
 > `orchestrator/` 现在是 `graph_langgraph.py`（图与节点）+ `runner.py`（任务生命周期），`dag.py` 与
 > `scheduler.py` 已删除；`rag/` 新增 `embedding.py` / `vector_index.py` / `hybrid.py`，
-> `corpus.py` 多了 `build_retriever(mode=...)` 工厂；测试数从 139 变为 260。
+> `corpus.py` 多了 `build_retriever(mode=...)` 工厂；测试数从 139 变为 320。
 
 ### 1.3 必须遵守的架构约束（违反会导致测试失败）
 
@@ -108,7 +108,7 @@ contracts  ←  core  ←  {persistence, agents, rag, llm, evaluation}  ←  orc
 
 ```bash
 cd backend
-python -m pytest -q                    # 跑全部测试（本文写作时 139 passed；T1/T2 完成后为 260）
+python -m pytest -q                    # 跑全部测试（本文写作时 139 passed；T1/T2 完成后为 320）
 ruff check .                           # 静态检查（当前 All checks passed）
 python -m app.cli doctor                # 环境自检：key 可用？知识库空不空？
 python -m app.cli run --profile real --topic "2026年中国新型储能行业" --sections 1
@@ -333,7 +333,7 @@ cd ../eval && python run_eval.py --arm B   # 单档评测
 
 ---
 
-### T3【P1】Function Calling / 联网检索工具 ⬜ 未开始（前置 T1 已完成，可开工）
+### ~~T3【P1】Function Calling / 联网检索工具~~ ✅ 已完成（默认关闭，见 [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §6.6）
 
 **目标**
 让 Agent 具备工具调用能力，并新增一个联网检索工具，
