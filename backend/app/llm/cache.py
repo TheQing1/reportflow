@@ -38,8 +38,10 @@ from typing import Any
 
 from ..contracts.llm import (
     LLMError,
+    LLMMessage,
     LLMRequest,
     LLMResponse,
+    LLMToolCall,
     LLMTransport,
     LLMUsage,
 )
@@ -100,18 +102,59 @@ def prompt_key(req: LLMRequest) -> str:
     不含模型、温度、max_tokens：
     - 换模型不该让开发缓存全部失效；
     - 温度只影响采样，回放的就是「录制那一刻采到的那一次」，这正是我们要的确定性。
+
+    **但必须包含 tools 与工具往返消息**。漏掉它们会产生一个极难排查的 bug：
+    同一个 prompt 配不同工具集，或工具返回了不同结果，却命中同一条缓存，
+    于是回放出「别的工具组合下」的响应——参数不同、结果相同，看起来完全正常。
+
+    关键细节：只有在**真的用了工具**时才把工具信息拼进 canonical 串。
+    这样引入 T3 之前录的那批缓存键仍然有效（否则整库缓存失效，
+    对靠回放离线开发的人来说等于凭空多花一笔钱）。
     """
+    payload: dict[str, object] = {
+        "v": CACHE_VERSION,
+        "messages": [_message_key(m) for m in req.messages],
+        "json_mode": bool(req.json_mode),
+    }
+    if req.tools:
+        # 排序后序列化：工具声明顺序不应影响语义，但会影响 hash
+        payload["tools"] = sorted(
+            [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": dict(t.parameters),
+                }
+                for t in req.tools
+            ],
+            key=lambda d: str(d["name"]),
+        )
+        payload["tool_choice"] = req.tool_choice or ""
+
     canonical = json.dumps(
-        {
-            "v": CACHE_VERSION,
-            "messages": [[m.role, m.content] for m in req.messages],
-            "json_mode": bool(req.json_mode),
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _message_key(msg: LLMMessage) -> object:
+    """单条消息进缓存键的形态。
+
+    普通 system/user/assistant 保持与旧版完全一致的两元组，
+    只有带工具痕迹的消息才升格成 dict，以保住历史缓存的可复用性。
+    """
+    if not msg.tool_calls and not msg.tool_call_id:
+        return [msg.role, msg.content]
+    return {
+        "role": msg.role,
+        "content": msg.content,
+        "tool_calls": [
+            {"id": c.id, "name": c.name, "arguments": c.arguments}
+            for c in msg.tool_calls
+        ],
+        "tool_call_id": msg.tool_call_id,
+        "name": msg.name,
+    }
 
 
 class CachedTransport:
@@ -152,6 +195,9 @@ class CachedTransport:
                 usage=_usage_of(existing),
                 latency_ms=0,
                 cached=True,
+                # 工具调用也必须回放，否则回放模式下"模型要调工具"这一步消失，
+                # Agent 会直接拿到空文本、走进完全不同的分支。
+                tool_calls=_tool_calls_of(existing),
             )
         if self.mode.reads_cache:
             self.misses += 1
@@ -229,6 +275,8 @@ class CachedTransport:
             # 只为人工排查，不参与哈希
             "preview": _preview(req),
         }
+        if resp.tool_calls:
+            payload["tool_calls"] = [c.to_dict() for c in resp.tool_calls]
         tmp = path.with_suffix(".json.tmp")
         try:
             tmp.write_text(
@@ -248,6 +296,29 @@ def _usage_of(record: dict[str, Any]) -> LLMUsage:
         prompt_tokens=int(usage.get("prompt_tokens", 0) or 0),
         completion_tokens=int(usage.get("completion_tokens", 0) or 0),
     )
+
+
+def _tool_calls_of(record: dict[str, Any]) -> tuple[LLMToolCall, ...]:
+    """从缓存记录里还原 tool_calls（旧缓存没有这个字段，返回空）。"""
+    raw = record.get("tool_calls")
+    if not isinstance(raw, list):
+        return ()
+    out: list[LLMToolCall] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        fn = item.get("function") or {}
+        name = str(fn.get("name") or "").strip()
+        if not name:
+            continue
+        out.append(
+            LLMToolCall(
+                id=str(item.get("id") or ""),
+                name=name,
+                arguments=str(fn.get("arguments") or ""),
+            )
+        )
+    return tuple(out)
 
 
 def _preview(req: LLMRequest) -> str:

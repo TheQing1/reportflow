@@ -24,6 +24,9 @@ ALLOWED: dict[str, set[str]] = {
     "agents": {"app.agents", "app.contracts", "app.core"},
     "llm": {"app.llm", "app.contracts", "app.core"},
     "rag": {"app.rag", "app.contracts", "app.core"},
+    # 工具层：与 rag/agents 平级的基础设施。只能依赖契约与 core，
+    # **不能**依赖 agents（否则 Agent↔工具 双向依赖，加工具就要改 Agent）
+    "tools": {"app.tools", "app.contracts", "app.core"},
     "orchestrator": {"app.orchestrator", "app.contracts", "app.core"},
     # 评测是应用层：可以读 runtime、复用 agents 的 JSON 解析，但不该被生产路径依赖
     "evaluation": {
@@ -106,6 +109,20 @@ class TestDependencyDirection(unittest.TestCase):
                 self.assertFalse(
                     mod.startswith(("app.persistence", "app.agents")),
                     f"{path.name} 依赖了具体实现 {mod}",
+                )
+
+    def test_tools_does_not_depend_on_agents(self) -> None:
+        """工具层不得依赖 Agent 层。
+
+        一旦反向依赖，就变成 Agent↔工具 双向耦合：
+        想加一个工具得改 Agent 的类型注解，想改 Agent 又得动工具。
+        工具只应认识 contracts 里的 Tool/ToolResult/ToolSpec。
+        """
+        for path in sorted((APP_ROOT / "tools").glob("*.py")):
+            for mod in _imported_modules(path):
+                self.assertFalse(
+                    mod.startswith("app.agents"),
+                    f"{path.name} 依赖了 Agent 层 {mod}",
                 )
 
 

@@ -14,10 +14,12 @@ import httpx
 
 from ..contracts.llm import (
     LLMBadResponse,
+    LLMMessage,
     LLMPermanent,
     LLMRateLimit,
     LLMRequest,
     LLMResponse,
+    LLMToolCall,
     LLMTransient,
     LLMUsage,
 )
@@ -53,13 +55,17 @@ class OpenAICompatibleTransport:
     async def send(self, req: LLMRequest) -> LLMResponse:
         payload: dict[str, Any] = {
             "model": req.model,
-            "messages": [{"role": m.role, "content": m.content} for m in req.messages],
+            "messages": [_message_payload(m) for m in req.messages],
             "temperature": req.temperature,
         }
         if req.max_tokens:
             payload["max_tokens"] = req.max_tokens
         if req.json_mode:
             payload["response_format"] = {"type": "json_object"}
+        if req.tools:
+            payload["tools"] = [t.to_dict() for t in req.tools]
+            if req.tool_choice:
+                payload["tool_choice"] = req.tool_choice
         if self._default_body:
             payload.update(self._default_body)
 
@@ -94,9 +100,14 @@ class OpenAICompatibleTransport:
         choices = data.get("choices") or []
         if not choices:
             raise LLMBadResponse(f"choices 为空: {str(data)[:200]}")
-        content = (choices[0].get("message") or {}).get("content")
-        if not content:
-            raise LLMBadResponse("message.content 为空")
+        message = choices[0].get("message") or {}
+        content = message.get("content")
+        tool_calls = _parse_tool_calls(message.get("tool_calls"))
+
+        # 工具调用轮次里 content 常常是 null —— 这不是错误，是模型用 tool_calls
+        # 表达意图。先判 tool_calls 再判 content，否则会把正常的工具请求当成坏响应。
+        if not tool_calls and not content:
+            raise LLMBadResponse("message.content 与 tool_calls 同时为空")
 
         usage_raw = data.get("usage") or {}
         usage = LLMUsage(
@@ -104,9 +115,50 @@ class OpenAICompatibleTransport:
             completion_tokens=int(usage_raw.get("completion_tokens") or 0),
         )
         return LLMResponse(
-            text=content,
+            text=content or "",
             model=data.get("model") or req.model,
             usage=usage,
             latency_ms=latency_ms,
             raw={"id": data.get("id")},
+            tool_calls=tool_calls,
         )
+
+
+def _message_payload(msg: LLMMessage) -> dict[str, Any]:
+    """把契约消息翻成 OpenAI 形状。
+
+    工具循环要原样回传 assistant 的 tool_calls 与 tool 结果，
+    少传任何一项厂商都会报 400，或让模型丢失"我刚要调什么"的上下文。
+    """
+    payload: dict[str, Any] = {"role": msg.role, "content": msg.content}
+    if msg.tool_calls:
+        payload["tool_calls"] = [c.to_dict() for c in msg.tool_calls]
+        # assistant 带 tool_calls 时 content 允许为空字符串，部分厂商要求显式 null
+        if not msg.content:
+            payload["content"] = None
+    if msg.role == "tool":
+        payload["tool_call_id"] = msg.tool_call_id
+        if msg.name:
+            payload["name"] = msg.name
+    return payload
+
+
+def _parse_tool_calls(raw: Any) -> tuple[LLMToolCall, ...]:
+    if not isinstance(raw, list):
+        return ()
+    out: list[LLMToolCall] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        fn = item.get("function") or {}
+        name = str(fn.get("name") or "").strip()
+        if not name:
+            continue
+        out.append(
+            LLMToolCall(
+                id=str(item.get("id") or ""),
+                name=name,
+                arguments=str(fn.get("arguments") or ""),
+            )
+        )
+    return tuple(out)

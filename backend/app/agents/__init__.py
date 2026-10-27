@@ -43,11 +43,19 @@ def build_mock_registry(config: MockAgentConfig | None = None) -> AgentRegistry:
     return AgentRegistry({t: MockAgent(t, cfg) for t in NodeType})
 
 
-def build_real_registry(llm: LLMClient, retriever: Retriever) -> AgentRegistry:
+def build_real_registry(
+    llm: LLMClient, retriever: Retriever, *, tools: object | None = None
+) -> AgentRegistry:
+    """装配真实 Agent。
+
+    `tools` 为 None 时只有 Researcher 保持原样（无工具）；
+    传了才给 Researcher 开启工具调用循环——其余三个 Agent 不需要工具，
+    给它们加只会让每次请求都带上一堆用不上的函数声明。
+    """
     return AgentRegistry(
         {
             NodeType.PLANNER: PlannerAgent(llm),
-            NodeType.RESEARCH: ResearcherAgent(llm, retriever),
+            NodeType.RESEARCH: ResearcherAgent(llm, retriever, tools=tools),
             NodeType.WRITE: WriterAgent(llm),
             NodeType.REVIEW: ReviewerAgent(llm),
         }

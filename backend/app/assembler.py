@@ -146,7 +146,28 @@ def build_runtime(
                 "知识库为空（%s）：Researcher 会返回空素材包，正文将全部是「资料未涉及」",
                 settings.docs_dir,
             )
-        registry = build_real_registry(llm, used_retriever)
+        # 工具是可选能力：ENABLE_TOOLS=false（默认）时 tool_registry 为 None，
+        # Researcher 走原来的单次补全路径，请求形状与引入 T3 之前完全一致。
+        tool_registry = None
+        if settings.enable_tools:
+            from .tools import build_default_registry
+
+            tool_registry = build_default_registry(
+                retriever=used_retriever,
+                enable_web=settings.enable_web_search,
+                web_top_k=settings.web_search_top_k,
+            )
+            log.info(
+                "工具已启用：{%s}%s",
+                tool_registry.describe(),
+                "" if settings.enable_web_search else "（联网检索关闭）",
+            )
+            if settings.enable_web_search:
+                log.warning(
+                    "联网检索已开启：结果会随时间变化，**不要**在此配置下跑 40 主题评测，"
+                    "否则基线不可复现"
+                )
+        registry = build_real_registry(llm, used_retriever, tools=tool_registry)
 
     budget_fn = None
     if used_retriever is not None:

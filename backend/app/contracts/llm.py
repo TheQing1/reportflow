@@ -36,9 +36,58 @@ class LLMUnavailable(LLMError):
 
 
 @dataclass(frozen=True)
+class LLMToolSpec:
+    """一个可被模型调用的工具声明（OpenAI tools 形状）。
+
+    `parameters` 是 JSON Schema。这里刻意用 `Mapping` 而不是自行定义一套 DSL：
+    厂商的 function calling 只认 JSON Schema，自造一层只会多一次翻译和一处漂移。
+    """
+
+    name: str
+    description: str
+    parameters: Mapping[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": dict(self.parameters) or {"type": "object", "properties": {}},
+            },
+        }
+
+
+@dataclass(frozen=True)
+class LLMToolCall:
+    """模型要求调用某个工具。`arguments` 保留原始字符串，由调用方解析。
+
+    不在这里直接解析成 dict 的原因：模型偶尔会返回非法 JSON，
+    那是"需要回灌给模型的错误"，不是"调用本函数就该抛的异常"。
+    """
+
+    id: str
+    name: str
+    arguments: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {"name": self.name, "arguments": self.arguments},
+        }
+
+
+@dataclass(frozen=True)
 class LLMMessage:
-    role: str  # system / user / assistant
+    role: str  # system / user / assistant / tool
     content: str
+    #: assistant 消息带上它请求的工具调用（多轮工具循环要原样回传，否则模型丢失上下文）
+    tool_calls: tuple[LLMToolCall, ...] = ()
+    #: role="tool" 时必填：这条结果对应哪一次调用
+    tool_call_id: str = ""
+    #: role="tool" 时可填工具名，便于日志排查
+    name: str = ""
 
 
 @dataclass(frozen=True)
@@ -52,6 +101,10 @@ class LLMRequest:
     timeout_s: float = 60.0
     #: 仅用于日志与计费归因，不参与请求
     tag: str = ""
+    #: 可用工具。为空表示纯文本补全（与引入 tools 之前的行为完全一致）
+    tools: tuple[LLMToolSpec, ...] = ()
+    #: "auto" / "none" / ""（不传）。默认交给厂商默认值
+    tool_choice: str = ""
 
     def with_model(self, model: str) -> LLMRequest:
         return LLMRequest(
@@ -62,6 +115,8 @@ class LLMRequest:
             json_mode=self.json_mode,
             timeout_s=self.timeout_s,
             tag=self.tag,
+            tools=self.tools,
+            tool_choice=self.tool_choice,
         )
 
 
@@ -86,6 +141,12 @@ class LLMResponse:
     #: 是否来自本地回放缓存。命中缓存不产生任何费用，span 成本记 0
     cached: bool = False
     raw: Mapping[str, Any] = field(default_factory=dict)
+    #: 模型请求调用的工具。非空时 `text` 通常为空
+    tool_calls: tuple[LLMToolCall, ...] = ()
+
+    @property
+    def wants_tools(self) -> bool:
+        return bool(self.tool_calls)
 
 
 @runtime_checkable

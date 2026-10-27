@@ -42,6 +42,37 @@ _SYSTEM = """[task:researcher] 你是资料整理员。任务是从给定原文�
  "open_questions":["缺少什么"]}"""
 
 
+#: 工具模式下的 system prompt。
+#:
+#: 与纯检索版的差别只有两条：**允许主动检索**、**多一条来源优先级**。
+#: 其余铁律（逐字引用、不得编造）**一字不改**——工具只是扩大可用材料范围，
+#: 不放松"每句话都要能回到原文"这个底线。
+_SYSTEM_WITH_TOOLS = """[task:researcher] 你是资料整理员。任务是从原文材料中抽取可引用的事实，供后续撰写使用。
+
+你可以调用工具来获取材料：
+- kb_search：检索本地知识库。**默认先用它**——数据稳定、可溯源。
+- web_search：检索互联网。当 kb_search 返回空、或材料明显不足以覆盖本章要点时用它。
+
+## 工作方式（按顺序判断，不要跳步）
+1. 先 kb_search 查本章主题。
+2. **如果 kb_search 返回空，或结果明显与主题无关，必须改用 web_search 再试一次** ——
+   不要因为"本地没有"就直接交白卷，那样会让整章只能写「资料未涉及」。
+3. 材料够了就停止检索，直接输出结论。不要为了"多查一点"反复调用同一个查询词。
+
+## 铁律（违反即视为无效输出）
+1. 只能使用工具返回的原文材料，**不得引入你自带的任何知识**，不得推算、不得补充。
+2. 每条 fact 的 quote 必须从材料中**逐字复制一段连续文字**（可截取，不可改写、
+   不可拼接、不可用省略号连接）。quote 会与原文做逐字字符串比对，改写一定失败。
+3. source_id 必须原样照抄材料里标注的 doc_id（知识库形如 doc_07，网页形如 web_xxx）。
+4. claim 是对该原文的概括，必须能被 quote 直接支撑。
+5. 材料里没有的信息，写进 open_questions，**绝对不要编**。
+
+只输出 JSON：
+{"chapter":1,"summary":"不超过200字，说明本章素材覆盖了什么",
+ "key_facts":[{"claim":"...","source_id":"doc_07","page":23,"quote":"原文逐字片段"}],
+ "open_questions":["缺少什么"]}"""
+
+
 def _norm(text: str) -> str:
     return re.sub(r"\s+", "", text)
 
@@ -120,11 +151,17 @@ class ResearcherAgent(JsonAgent):
         *,
         snippets_per_query: int = 3,
         pool_with_budget: int = 20,
+        tools=None,
     ) -> None:
         # 3000 而不是默认 2000：每条 fact 都要带上 quote 原文，
         # 素材一多输出就会顶到上限被截断，JSON 变非法（实测报
         # "Unterminated string @ 4244"），整个 research 节点失败、下游全 BLOCKED。
-        super().__init__(llm, temperature=0.1, max_tokens=3000)
+        #
+        # 工具模式下 +1000：工具结果会占掉一部分上下文预算。
+        effective_tokens = 4000 if tools is not None else 3000
+        super().__init__(
+            llm, temperature=0.1, max_tokens=effective_tokens, tools=tools
+        )
         self._retriever = retriever
         self._per_query = snippets_per_query
         #: 有文档预算时的召回池大小。必须显著大于 per_query，重排才有腾挪空间。
@@ -138,7 +175,8 @@ class ResearcherAgent(JsonAgent):
             queries, chapter, [str(d) for d in budget] if budget else None
         )
 
-        if not snippets:
+        # 工具模式下，即便预检索为空也要给模型机会：它可能通过 web_search 找到材料。
+        if not snippets and self._tools is None:
             # 检索无命中不重试、不失败：让 Writer 显式写"资料未涉及"，
             # 比让整章崩掉更符合产品目标（初稿可缺，但不可编）
             self._log.warning("[%s] 检索无命中，返回空素材包", ctx.node.id)
@@ -151,15 +189,19 @@ class ResearcherAgent(JsonAgent):
 
         data, _ = await self.ask_json(
             ctx.node.id,
-            _SYSTEM,
+            _SYSTEM if self._tools is None else _SYSTEM_WITH_TOOLS,
             self._build_user(chapter, snippets, ctx.hint),
             timeout_s=self.timeout_for(ctx.node.timeout_s),
         )
-        packet = self._verify(data, snippets, chapter=chapter)
+        # 关键：工具模式下证据池要包含"模型自己查回来的片段"，
+        # 否则它引用网页内容时会被 _verify 判成"source_id 不在检索结果中"，
+        # 好不容易查到的材料被全部丢弃——这是 T3 最容易埋的坑。
+        evidence = self._evidence_pool(snippets)
+        packet = self._verify(data, evidence, chapter=chapter)
         self._log.info(
-            "[%s] 素材包：命中 %d 片段，保留 %d 条 fact，丢弃 %d 条（引用无法在原文中找到）",
+            "[%s] 素材包：证据池 %d 片段，保留 %d 条 fact，丢弃 %d 条（引用无法在原文中找到）",
             ctx.node.id,
-            len(snippets),
+            len(evidence),
             len(packet.key_facts),
             packet.dropped_facts,
         )
@@ -167,10 +209,54 @@ class ResearcherAgent(JsonAgent):
             **packet.to_dict(),
             "retrieval": {
                 "queries": queries,
-                "snippets": len(snippets),
+                "snippets": len(evidence),
                 "dropped": packet.dropped_facts,
+                "sources": self._source_stats(evidence),
             },
         }
+
+    # ---------------------------------------------------------------- 证据池
+
+    def _evidence_pool(self, snippets: Sequence[Snippet]) -> list[Snippet]:
+        """预检索片段 + 工具返回片段，合成可校验的证据池。
+
+        工具返回的条目形状与 Snippet 不同（网页有 url、没有 page），
+        但 `_verify` 只关心 (doc_id, text) 这一对，所以这里归一成 Snippet。
+        `score` 给 0：它们不参与排序，只参与"这段原文是否存在"的判定。
+
+        注意 web 片段的 `text` 是**抓回来的原文**，不做任何摘要改写——
+        `_verify` 要拿 quote 在里面做逐字子串匹配，改写一个字符就会失败。
+        """
+        pool: list[Snippet] = list(snippets)
+        if self._tools is None:
+            return pool
+
+        seen = {(s.doc_id, _norm(s.text)[:80]) for s in pool}
+        for item in self._tools.last_items():
+            doc_id = str(item.get("doc_id") or "")
+            text = str(item.get("text") or "")
+            if not doc_id or not text:
+                continue
+            key = (doc_id, _norm(text)[:80])
+            if key in seen:
+                continue
+            seen.add(key)
+            pool.append(
+                Snippet(
+                    doc_id=doc_id,
+                    title=str(item.get("title") or doc_id),
+                    page=None,
+                    text=text,
+                    score=0.0,
+                )
+            )
+        return pool
+
+    @staticmethod
+    def _source_stats(pool: Sequence[Snippet]) -> dict[str, int]:
+        """按来源类型计数，便于在溯源面板/日志里看出"这次用了几个网页"。"""
+        web = sum(1 for s in pool if s.doc_id.startswith("web_"))
+        return {"local": len(pool) - web, "web": web}
 
     # ---------------------------------------------------------------- 检索
 

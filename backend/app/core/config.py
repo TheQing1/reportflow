@@ -111,6 +111,19 @@ class Settings:
     #: 向量索引落盘目录。放 data/ 下，已被 .gitignore 覆盖。
     vector_index_dir: str = ""
 
+    # ---- 工具（Function Calling）----
+    #: 是否让 Agent 具备工具调用能力。默认**关闭**：
+    #: 开着会让每次 research 多出 1~3 轮模型调用（成本上升、结果不确定性变大）。
+    #: 关掉时请求形状与引入 T3 之前逐字节一致，评测基线不受影响。
+    enable_tools: bool = False
+    #: 是否允许联网检索。默认**关闭**，且独立于 enable_tools：
+    #: 联网内容随时间变化，一旦默认开启，40 主题评测就不再可复现。
+    enable_web_search: bool = False
+    #: 工具循环最大轮次（模型最多要求几轮工具调用）。3 轮够「查→补查→写」。
+    tool_max_rounds: int = 3
+    #: 联网检索每次返回的网页数
+    web_search_top_k: int = 3
+
     @classmethod
     def load(cls, env_file: Path | None = None) -> Settings:
         file_env = _read_env_file(env_file or _find_env_file() or Path("/nonexistent"))
@@ -173,6 +186,11 @@ class Settings:
             rrf_k=max(1, int(get("RRF_K", "60"))),
             vector_index_dir=get("VECTOR_INDEX_DIR", "").strip()
             or str(PROJECT_ROOT / "data" / "vector_index"),
+            enable_tools=get("ENABLE_TOOLS", "false").lower() in {"1", "true", "yes"},
+            enable_web_search=get("ENABLE_WEB_SEARCH", "false").lower()
+            in {"1", "true", "yes"},
+            tool_max_rounds=max(1, int(get("TOOL_MAX_ROUNDS", "3"))),
+            web_search_top_k=max(1, min(5, int(get("WEB_SEARCH_TOP_K", "3")))),
         )
 
     def with_overrides(self, **kwargs: object) -> Settings:
