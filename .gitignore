@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -71,5 +71,7 @@ eval/results/*/*
 .workbuddy/
 
 # 临时提交信息文件（git commit -F 用的）
+# 用通配符而不是逐个列举：之前只写了 `_msg*.txt` 和 `_m.txt`，
+# 结果 `_m1.txt` 漏网、被 `git add -A` 带进了一个正式提交。
 _msg*.txt
-_m.txt
+_m*.txt
