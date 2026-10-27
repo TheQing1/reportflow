@@ -46,15 +46,11 @@ class LocateCitationTest(unittest.TestCase):
         self.assertEqual(got, [])
 
     def test_returns_empty_when_number_not_in_any_doc(self) -> None:
-        got = locate_citation(
-            "新增装机约9.1GWh", doc_ids=list(CORPUS), full_text=_full_text
-        )
+        got = locate_citation("新增装机约9.1GWh", doc_ids=list(CORPUS), full_text=_full_text)
         self.assertEqual(got, [])
 
     def test_ignores_whitespace_difference(self) -> None:
-        got = locate_citation(
-            "新增装机约 8.4 GWh", doc_ids=list(CORPUS), full_text=_full_text
-        )
+        got = locate_citation("新增装机约 8.4 GWh", doc_ids=list(CORPUS), full_text=_full_text)
         self.assertEqual(got[0], "doc_04_scale_cig")
 
 

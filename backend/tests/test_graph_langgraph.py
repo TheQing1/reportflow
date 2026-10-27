@@ -53,9 +53,7 @@ class RecordingAgent:
         return [nid for nid, _, _ in self.intervals]
 
     def max_overlap(self, prefix: str) -> int:
-        spans = sorted(
-            [(s, e) for nid, s, e in self.intervals if nid.startswith(prefix)]
-        )
+        spans = sorted([(s, e) for nid, s, e in self.intervals if nid.startswith(prefix)])
         best = cur = 0
         edges = [(s, 1) for s, _ in spans] + [(e, -1) for _, e in spans]
         for _, delta in sorted(edges, key=lambda x: (x[0], x[1])):
@@ -71,9 +69,7 @@ def make_registry(
         latency_s=FAST_LATENCY, fail_nodes=frozenset(fail_nodes or ()), jitter_s=0.01
     )
     base = build_mock_registry(cfg)
-    rec: dict[NodeType, RecordingAgent] = {
-        t: RecordingAgent(base.get(t)) for t in NodeType
-    }
+    rec: dict[NodeType, RecordingAgent] = {t: RecordingAgent(base.get(t)) for t in NodeType}
     return AgentRegistry(rec), rec
 
 
@@ -329,9 +325,7 @@ class TestResume(GraphTestBase):
             asyncio.run(rt.runner.run(task_id, crash_before="write_ch3"))
 
         nodes_after_crash = {n.node_id: n for n in rt.store.list_nodes(task_id)}
-        done_before = {
-            nid for nid, n in nodes_after_crash.items() if n.status is NodeStatus.DONE
-        }
+        done_before = {nid for nid, n in nodes_after_crash.items() if n.status is NodeStatus.DONE}
         self.assertTrue(done_before, "崩溃前应至少完成一些节点")
         self.assertIs(nodes_after_crash["write_ch3"].status, NodeStatus.RUNNING)
 
@@ -407,8 +401,7 @@ class _ReviseAgents:
         def planner(ctx: AgentContext) -> dict[str, Any]:
             return {
                 "outline": [
-                    {"chapter": i, "title": f"第{i}章", "queries": [f"q{i}"]}
-                    for i in (1, 2)
+                    {"chapter": i, "title": f"第{i}章", "queries": [f"q{i}"]} for i in (1, 2)
                 ]
             }
 
@@ -504,9 +497,7 @@ class TestRevisionLoop(GraphTestBase):
         agents = _ReviseAgents(revise_times=99)
         rt, task_id, result = self._run(agents)
         nodes = {n.node_id: n for n in rt.store.list_nodes(task_id)}
-        self.assertEqual(
-            nodes["review_ch1"].review_round, 2, "打回轮数应停在 max_review_rounds"
-        )
+        self.assertEqual(nodes["review_ch1"].review_round, 2, "打回轮数应停在 max_review_rounds")
         self.assertIs(result.task_status, TaskStatus.PARTIAL)
         # 收敛性：每章最多 max_review_rounds+1 次 review
         self.assertLessEqual(agents.review_calls[1], 3)
@@ -619,9 +610,7 @@ class TestTopologyMatrix(GraphTestBase):
                     rt, task_id, result = self._run(serial_tail, with_review)
                     nodes = {n.node_id: n for n in rt.store.list_nodes(task_id)}
                     self.assertIs(result.task_status, TaskStatus.DONE)
-                    bad = [
-                        k for k, n in nodes.items() if n.status is not NodeStatus.DONE
-                    ]
+                    bad = [k for k, n in nodes.items() if n.status is not NodeStatus.DONE]
                     self.assertEqual(bad, [], f"未完成: {bad}")
 
 

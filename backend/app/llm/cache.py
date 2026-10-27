@@ -131,9 +131,7 @@ def prompt_key(req: LLMRequest) -> str:
         )
         payload["tool_choice"] = req.tool_choice or ""
 
-    canonical = json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    )
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -149,8 +147,7 @@ def _message_key(msg: LLMMessage) -> object:
         "role": msg.role,
         "content": msg.content,
         "tool_calls": [
-            {"id": c.id, "name": c.name, "arguments": c.arguments}
-            for c in msg.tool_calls
+            {"id": c.id, "name": c.name, "arguments": c.arguments} for c in msg.tool_calls
         ],
         "tool_call_id": msg.tool_call_id,
         "name": msg.name,
@@ -279,9 +276,7 @@ class CachedTransport:
             payload["tool_calls"] = [c.to_dict() for c in resp.tool_calls]
         tmp = path.with_suffix(".json.tmp")
         try:
-            tmp.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8"
-            )
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
             os.replace(tmp, path)  # 原子落盘：中途被杀也不会留下半个 JSON
         except OSError as exc:
             self._log.warning("写缓存失败 %s: %s", path, exc)
@@ -350,9 +345,7 @@ def cache_summary(cache_dir: str | Path) -> dict[str, Any]:
     if files:
         from datetime import datetime
 
-        newest = datetime.fromtimestamp(files[-1].stat().st_mtime).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        newest = datetime.fromtimestamp(files[-1].stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
     return {
         "dir": str(root),
         "files": len(files),

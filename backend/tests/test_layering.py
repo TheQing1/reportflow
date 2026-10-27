@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import unittest
 from pathlib import Path
 
@@ -124,6 +125,50 @@ class TestDependencyDirection(unittest.TestCase):
                     mod.startswith("app.agents"),
                     f"{path.name} 依赖了 Agent 层 {mod}",
                 )
+
+
+def _declared_packages() -> list[str]:
+    """从 pyproject.toml 读 [tool.setuptools] 的 packages。
+
+    不用简单正则直接匹配 —— `[tool.setuptools]` 与 `packages = [` 之间
+    允许有注释行（本项目就写了注释）。先按行剥掉注释再匹配，避免测试
+    因为"多写了一句说明"而失败。
+    """
+    raw = (APP_ROOT.parent / "pyproject.toml").read_text(encoding="utf-8")
+    lines = [ln.split("#", 1)[0] for ln in raw.splitlines()]
+    text = "\n".join(lines)
+    block = re.search(r"\[tool\.setuptools\]\s*\n\s*packages = \[(.*?)\]", text, re.S)
+    if block is None:
+        raise AssertionError("pyproject.toml 里找不到 [tool.setuptools] packages")
+    return re.findall(r'"([^"]+)"', block.group(1))
+
+
+class TestPackaging(unittest.TestCase):
+    """子包必须同时出现在 `pyproject.toml` 的 packages 里。
+
+    这条约束只能靠测试守：漏掉一个子包**不会**在开发时暴露——本地跑测试、
+    跑 CLI 时 cwd 就在 sys.path 上，`import app.tools` 照样成功。
+    只有 `pip install .` 到干净环境（Docker 镜像、被别人安装）时才
+    ModuleNotFoundError，而那时已经离改动很远了。
+    """
+
+    def test_every_subpackage_is_declared(self) -> None:
+        declared = set(_declared_packages())
+
+        on_disk = {"app"} | {f"app.{p.parent.name}" for p in APP_ROOT.glob("*/__init__.py")}
+        self.assertEqual(
+            sorted(on_disk - declared),
+            [],
+            "以下子包没有在 pyproject.toml 的 packages 中声明，pip install 后会 import 失败",
+        )
+
+    def test_declared_packages_exist(self) -> None:
+        """反向：声明了但目录不存在，setuptools 打包会直接失败。"""
+        base = APP_ROOT.parent
+        missing = [
+            pkg for pkg in _declared_packages() if not (base / Path(*pkg.split("."))).is_dir()
+        ]
+        self.assertEqual(missing, [], "pyproject.toml 声明了不存在的包")
 
 
 if __name__ == "__main__":

@@ -246,7 +246,9 @@ class ModeSwitchTest(unittest.TestCase):
         self.assertEqual(got.effective_mode, "vector")
 
     def test_mode_comes_from_settings_by_default(self) -> None:
-        settings = Settings(database_url="sqlite://", retrieval_mode="vector", embedding_api_key="k")
+        settings = Settings(
+            database_url="sqlite://", retrieval_mode="vector", embedding_api_key="k"
+        )
         got = build_retriever(None, docs_dir=self.tmp, settings=settings)
         self.assertIsInstance(got, HybridRetriever)
         self.assertEqual(got.mode, "vector")
@@ -626,9 +628,7 @@ class RrfScoreScaleContractTest(unittest.TestCase):
         from app.agents.researcher import _rerank_by_budget
 
         best_outside = Snippet(doc_id="outside", title="t", page=None, text="x", score=1 / 61)
-        worst_budgeted = Snippet(
-            doc_id="budgeted", title="t", page=None, text="x", score=1 / 80
-        )
+        worst_budgeted = Snippet(doc_id="budgeted", title="t", page=None, text="x", score=1 / 80)
         order = _rerank_by_budget([best_outside, worst_budgeted], {"budgeted"}, limit=2)
         # 记录当前行为：预算内的永远在前 —— 等价于硬过滤，
         # 与 budget.py 注释里"不做硬过滤"的设计意图相反。切换 hybrid 前必须先解决。
@@ -720,7 +720,9 @@ class EmbeddingCacheTest(unittest.TestCase):
         second = _embedder(_Different(), cache_dir=self.tmp, mode=EmbeddingCacheMode.RECORD)
         _run(second.embed_texts(["戊"]))
 
-        rep = _embedder(_FakeEmbeddingTransport(), cache_dir=self.tmp, mode=EmbeddingCacheMode.REPLAY)
+        rep = _embedder(
+            _FakeEmbeddingTransport(), cache_dir=self.tmp, mode=EmbeddingCacheMode.REPLAY
+        )
         self.assertEqual(_run(rep.embed_texts(["戊"]))[0], _vec_of("戊"))
 
     def test_cache_lives_under_embeddings_subdir(self) -> None:
@@ -795,7 +797,9 @@ class EmbeddingCacheTest(unittest.TestCase):
         self.assertEqual(transport.calls, 3)  # 首次 + 2 次重试
 
     def test_no_tmp_files_left(self) -> None:
-        emb = _embedder(_FakeEmbeddingTransport(), cache_dir=self.tmp, mode=EmbeddingCacheMode.RECORD)
+        emb = _embedder(
+            _FakeEmbeddingTransport(), cache_dir=self.tmp, mode=EmbeddingCacheMode.RECORD
+        )
         _run(emb.embed_texts(["原子写"]))
         self.assertEqual(list((self.tmp / "embeddings").rglob("*.tmp")), [])
 
@@ -857,7 +861,9 @@ class VectorIndexUnitTest(unittest.TestCase):
     def test_index_matches_requires_same_text(self) -> None:
         tmp = Path(tempfile.mkdtemp(prefix="rfidx-"))
         self.addCleanup(shutil.rmtree, tmp, True)
-        index = VectorIndex(_embedder(_FakeEmbeddingTransport(), cache_dir=tmp), index_dir=tmp / "i")
+        index = VectorIndex(
+            _embedder(_FakeEmbeddingTransport(), cache_dir=tmp), index_dir=tmp / "i"
+        )
         chunks = [IndexedChunk("d", "T", None, "第一段"), IndexedChunk("d", "T", None, "第二段")]
         _run(index.build(chunks))
         self.assertTrue(index.matches("fake-embed", chunks))

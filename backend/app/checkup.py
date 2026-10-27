@@ -88,9 +88,7 @@ def _overlap(sentence: str, body: str, n: int = 2) -> int:
     return sum(1 for g in grams if g in body)
 
 
-def locate_citation(
-    sentence: str, *, doc_ids: Sequence[str], full_text
-) -> list[str]:
+def locate_citation(sentence: str, *, doc_ids: Sequence[str], full_text) -> list[str]:
     """找出该断言里的数字实际出现在哪几篇文档。
 
     先按"命中的数字个数"排，再按词面重合度排——数字是最硬的指纹，

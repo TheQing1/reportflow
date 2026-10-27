@@ -117,12 +117,9 @@ class KBSearchTool:
         for i, it in enumerate(items, 1):
             page = f" 页码={it['page']}" if it.get("page") else ""
             text, _ = truncate(str(it["text"]), limit=1200)
-            blocks.append(
-                f"[片段{i}] doc_id={it['doc_id']} 标题={it['title']}{page}\n原文：{text}"
-            )
+            blocks.append(f"[片段{i}] doc_id={it['doc_id']} 标题={it['title']}{page}\n原文：{text}")
         blocks.append(
-            "引用要求：source_id 必须照抄上面的 doc_id；"
-            "quote 必须从「原文」中逐字复制连续文字。"
+            "引用要求：source_id 必须照抄上面的 doc_id；quote 必须从「原文」中逐字复制连续文字。"
         )
         return "\n\n".join(blocks)
 

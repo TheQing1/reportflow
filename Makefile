@@ -25,8 +25,10 @@ test: ## 运行后端测试
 test-cov: ## 运行测试并输出覆盖率
 	cd backend && python -m pytest -q --cov=app --cov-report=term-missing
 
-lint: ## 静态检查
+lint: ## 静态检查（lint + 格式 + 类型，与 CI 一致）
 	cd backend && ruff check .
+	cd backend && ruff format --check .
+	cd backend && mypy app/contracts app/core
 
 fmt: ## 自动修复 + 格式化
 	cd backend && ruff check --fix . && ruff format .

@@ -28,10 +28,7 @@ from app.orchestrator.graph_langgraph import build_report_graph
 
 class TestReportMetrics(unittest.TestCase):
     def test_repeat_rate_counts_sources_shared_across_chapters(self) -> None:
-        text = (
-            "## 第一章\n\n甲说[^doc_01]，乙说[^doc_02]。\n\n"
-            "## 第二章\n\n又说了一遍[^doc_01]。\n"
-        )
+        text = "## 第一章\n\n甲说[^doc_01]，乙说[^doc_02]。\n\n## 第二章\n\n又说了一遍[^doc_01]。\n"
         artifact = collect_from_text(text)
         # doc_01 被两章引用，doc_02 只被一章引用 → 1/2
         self.assertAlmostEqual(artifact.repeat_rate, 0.5)
@@ -249,9 +246,7 @@ class TestSemanticSupport(unittest.TestCase):
         """judge 漏写一条，不能当成"不支持"——否则模型少写一行就凭空拉低分数。"""
         from app.evaluation.semantic import Assertion, SupportAuditor
 
-        llm = ScriptedLLM(
-            {"audit": json_handler({"items": [{"idx": 1, "verdict": "supported"}]})}
-        )
+        llm = ScriptedLLM({"audit": json_handler({"items": [{"idx": 1, "verdict": "supported"}]})})
         report = asyncio.run(
             SupportAuditor(llm).audit(
                 [Assertion(1, "断言一内容", "doc_01"), Assertion(1, "断言二内容", "doc_01")],
@@ -317,17 +312,19 @@ class ClaimRepeatTest(unittest.TestCase):
 
     def test_shared_source_is_not_counted(self) -> None:
         # 两章引用同一篇文档，但讲的是完全不同的数据 → 不算复读
-        art = self._artifact([
-            "2025 年新增装机达到 8.4GWh，同比增长 62% 规模持续扩张[^doc_a]。",
-            "系统集成环节 CR5 约为 38%，较上年提升 4 个百分点[^doc_a]。",
-        ])
+        art = self._artifact(
+            [
+                "2025 年新增装机达到 8.4GWh，同比增长 62% 规模持续扩张[^doc_a]。",
+                "系统集成环节 CR5 约为 38%，较上年提升 4 个百分点[^doc_a]。",
+            ]
+        )
         from app.evaluation.report import _CITE
 
         for idx, ch in enumerate(art.chapter_texts, 1):
             for t in _CITE.findall(ch):
                 art.source_chapters.setdefault(t.strip(), set()).add(idx)
-        self.assertEqual(art.repeat_rate, 1.0)   # 来源复用 100%
-        self.assertLess(art.claim_repeat, 0.05)   # 但论述几乎不重复
+        self.assertEqual(art.repeat_rate, 1.0)  # 来源复用 100%
+        self.assertLess(art.claim_repeat, 0.05)  # 但论述几乎不重复
 
     def test_verbatim_repetition_is_caught(self) -> None:
         sentence = "2025年储能系统集成环节的市场集中度仍然偏低，CR5约为38%，较上一年提升4个百分点"

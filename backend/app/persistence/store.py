@@ -111,19 +111,13 @@ class SqlTaskStore:
     def list_task_ids(self, *, limit: int = 10) -> list[str]:
         with self._session() as s:
             return list(
-                s.scalars(
-                    select(TaskRow.id)
-                    .order_by(TaskRow.created_at.desc())
-                    .limit(limit)
-                ).all()
+                s.scalars(select(TaskRow.id).order_by(TaskRow.created_at.desc()).limit(limit)).all()
             )
 
     def list_nodes(self, task_id: str) -> list[NodeState]:
         with self._session() as s:
             rows = s.scalars(
-                select(NodeRow)
-                .where(NodeRow.task_id == task_id)
-                .order_by(NodeRow.node_id)
+                select(NodeRow).where(NodeRow.task_id == task_id).order_by(NodeRow.node_id)
             ).all()
             return [self._to_state(r) for r in rows]
 
@@ -158,9 +152,7 @@ class SqlTaskStore:
 
     # ---------------- 节点状态迁移 ----------------
 
-    def start_node(
-        self, *, task_id: str, node_id: str, attempt: int, owner: str
-    ) -> bool:
+    def start_node(self, *, task_id: str, node_id: str, attempt: int, owner: str) -> bool:
         """PENDING -> RUNNING。条件更新保证同一 (node, attempt) 只被抢一次。"""
         now = utcnow()
         with self._session() as s:
@@ -320,9 +312,7 @@ class SqlTaskStore:
                 update(NodeRow)
                 .where(
                     NodeRow.task_id == task_id,
-                    NodeRow.status.in_(
-                        [NodeStatus.FAILED.value, NodeStatus.BLOCKED.value]
-                    ),
+                    NodeRow.status.in_([NodeStatus.FAILED.value, NodeStatus.BLOCKED.value]),
                 )
                 .values(
                     status=NodeStatus.PENDING.value,
@@ -365,9 +355,7 @@ class SqlTaskStore:
                 .where(
                     NodeRow.task_id == task_id,
                     NodeRow.node_id.in_(list(targets)),
-                    NodeRow.status.in_(
-                        [NodeStatus.DONE.value, NodeStatus.PENDING.value]
-                    ),
+                    NodeRow.status.in_([NodeStatus.DONE.value, NodeStatus.PENDING.value]),
                 )
                 .values(
                     status=NodeStatus.PENDING.value,

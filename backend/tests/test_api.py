@@ -72,9 +72,7 @@ class ApiTest(unittest.TestCase):
     # ------------------------------------------------------------ 任务流程
 
     def test_create_run_and_read_back(self) -> None:
-        created = self.client.post(
-            "/api/tasks", json={"topic": "工商业储能", "sections": 2}
-        )
+        created = self.client.post("/api/tasks", json={"topic": "工商业储能", "sections": 2})
         self.assertEqual(created.status_code, 200)
         task_id = created.json()["task_id"]
         self.assertTrue(created.json()["created"])
@@ -119,26 +117,28 @@ class ApiTest(unittest.TestCase):
         with_rev = self.client.post(
             "/api/tasks", json={**body, "task_id": "with-rev", "review": True}
         ).json()
+
         def kinds(tid: str) -> list[str]:
             return [n["type"] for n in self.client.get(f"/api/tasks/{tid}").json()["nodes"]]
+
         self.assertNotIn("review", kinds(plain["task_id"]))
         self.assertIn("review", kinds(with_rev["task_id"]))
 
     # ------------------------------------------------------------ 产出
 
     def test_export_returns_markdown(self) -> None:
-        tid = self.client.post(
-            "/api/tasks", json={"topic": "工商业储能", "sections": 2}
-        ).json()["task_id"]
+        tid = self.client.post("/api/tasks", json={"topic": "工商业储能", "sections": 2}).json()[
+            "task_id"
+        ]
         self.client.post(f"/api/tasks/{tid}/run")
         md = self.client.get(f"/api/tasks/{tid}/export").json()["markdown"]
         self.assertIn("工商业储能", md)
         self.assertIn("## ", md)
 
     def test_cost_endpoint_attributes_by_node(self) -> None:
-        tid = self.client.post(
-            "/api/tasks", json={"topic": "工商业储能", "sections": 1}
-        ).json()["task_id"]
+        tid = self.client.post("/api/tasks", json={"topic": "工商业储能", "sections": 1}).json()[
+            "task_id"
+        ]
         self.client.post(f"/api/tasks/{tid}/run")
         self._wait_done(tid)
         body = self.client.get(f"/api/tasks/{tid}/cost").json()
@@ -160,7 +160,9 @@ class ApiTest(unittest.TestCase):
         before = self.client.get("/api/corpus").json()["chunks"]
         res = self.client.post(
             "/api/corpus/upload",
-            files={"files": ("我的笔记.md", "# 我的笔记\n\n2026 年内部目标装机 9.9GWh。\n".encode())},
+            files={
+                "files": ("我的笔记.md", "# 我的笔记\n\n2026 年内部目标装机 9.9GWh。\n".encode())
+            },
         )
         self.assertEqual(res.status_code, 200)
         data = res.json()
@@ -172,17 +174,14 @@ class ApiTest(unittest.TestCase):
         self.assertIn(data["uploaded"][0]["doc_id"], listed)
 
     def test_upload_rejects_unsupported_extension(self) -> None:
-        res = self.client.post(
-            "/api/corpus/upload", files={"files": ("表.docx", b"binary")}
-        )
+        res = self.client.post("/api/corpus/upload", files={"files": ("表.docx", b"binary")})
         data = res.json()
         self.assertEqual(data["uploaded"], [])
         self.assertTrue(data["failed"])
 
     def test_delete_removes_document(self) -> None:
         up = self.client.post(
-            "/api/corpus/upload",
-            files={"files": ("临时.md", "# 临时\n\n待删除。".encode())}
+            "/api/corpus/upload", files={"files": ("临时.md", "# 临时\n\n待删除。".encode())}
         ).json()
         doc_id = up["uploaded"][0]["doc_id"]
         res = self.client.delete(f"/api/corpus/{doc_id}").json()
@@ -194,9 +193,9 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/tasks/nope/cost").status_code, 404)
 
     def test_trace_exposes_facts_for_citation_panel(self) -> None:
-        tid = self.client.post(
-            "/api/tasks", json={"topic": "工商业储能", "sections": 1}
-        ).json()["task_id"]
+        tid = self.client.post("/api/tasks", json={"topic": "工商业储能", "sections": 1}).json()[
+            "task_id"
+        ]
         self.client.post(f"/api/tasks/{tid}/run")
         trace = self.client.get(f"/api/tasks/{tid}/trace").json()
         self.assertEqual(len(trace["chapters"]), 1)
@@ -208,9 +207,9 @@ class ApiTest(unittest.TestCase):
     # ------------------------------------------------------------ SSE
 
     def test_stream_emits_node_and_done_events(self) -> None:
-        tid = self.client.post(
-            "/api/tasks", json={"topic": "工商业储能", "sections": 1}
-        ).json()["task_id"]
+        tid = self.client.post("/api/tasks", json={"topic": "工商业储能", "sections": 1}).json()[
+            "task_id"
+        ]
         # 必须先启动：任务停在 PENDING 时流不会结束（那是有意的，等待用户触发）
         self.client.post(f"/api/tasks/{tid}/run")
 

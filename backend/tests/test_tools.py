@@ -84,7 +84,9 @@ class TruncateTest(unittest.TestCase):
 
 class StripHtmlTest(unittest.TestCase):
     def test_removes_script_and_style(self) -> None:
-        html = "<html><head><style>.a{color:red}</style></head><body><p>正文在这里</p></body></html>"
+        html = (
+            "<html><head><style>.a{color:red}</style></head><body><p>正文在这里</p></body></html>"
+        )
         text = strip_html(html)
         self.assertIn("正文在这里", text)
         self.assertNotIn("color:red", text)
@@ -334,9 +336,7 @@ class DdgParseTest(unittest.TestCase):
         self.assertEqual(hits[0][0], "标题A")
 
     def test_respects_limit(self) -> None:
-        html = "".join(
-            f'<a class="result__a" href="https://e.com/{i}">t{i}</a>' for i in range(10)
-        )
+        html = "".join(f'<a class="result__a" href="https://e.com/{i}">t{i}</a>' for i in range(10))
         self.assertEqual(len(_parse_ddg_html(html, limit=3)), 3)
 
     def test_broken_html_returns_empty_not_crash(self) -> None:
@@ -363,9 +363,7 @@ class DocIdTest(unittest.TestCase):
         self.assertNotIn(" ", a)
 
     def test_different_urls_differ(self) -> None:
-        self.assertNotEqual(
-            _doc_id_of("https://a.com/x"), _doc_id_of("https://a.com/y")
-        )
+        self.assertNotEqual(_doc_id_of("https://a.com/x"), _doc_id_of("https://a.com/y"))
 
 
 class DefaultRegistryTest(unittest.TestCase):

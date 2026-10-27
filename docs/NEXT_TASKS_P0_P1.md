@@ -11,7 +11,7 @@
 |---|---|---|
 | T1【P0】编排替换：自研 DAG → LangGraph | **已完成** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §3 |
 | T2【P0】混合检索：BM25 + 向量 + RRF 融合 | **已完成** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §4 |
-| T3【P1】Function Calling / 联网检索工具 | **已完成（默认关闭）** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §6.6 |
+| T3【P1】Function Calling / 联网检索工具 | **已完成（默认关闭）** | [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §6.7 |
 
 几点与本文原计划**不同**的落地事实，读下文任务描述时请以这里为准：
 
@@ -20,10 +20,14 @@
    理由是"仓库里同时存在两套编排，面试官会质疑主链路到底是哪个"。
    旧实现见 git 历史。代价是这次迁移不可运行时降级，只能回滚到迁移前的 commit。
 2. **T1 的测试目标从"139 条不减少"变成了净增**：删掉 `test_dag.py`(9) 与 `test_scheduler.py`(7)
-   的同时新增 `test_graph_langgraph.py`(28)，全量从 139 → **320 passed**。
-3. **T2 的评测结论没有产出**。本文要求"用 40 主题评测集产出三档量化对照"，实际只做到
-   "三档可用 + 离线可复现 + 单主题实测"；40 主题三档对比**未重跑**（LangGraph 改造后基线也一起缺），
-   属已知未完成项。**不要**把历史基线数字当成 T2 的评测结论引用。
+   的同时新增 `test_graph_langgraph.py`(28)，全量从 139 → **323 passed**。
+3. **T2 的"40 主题三档量化对照"仍然没有产出**。实际做到的是
+   "三档可用 + 离线可复现 + 单主题实测"。
+   注意区分：**LangGraph 改造后的 40 主题基线已经重跑**（`v9-langgraph`，见
+   [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §6.6），但它跑的是 `RETRIEVAL_MODE=bm25`
+   ——刻意不把"换编排"和"换检索"两个变量混在一起。
+   所以 `vector` / `hybrid` 两档至今**没有** 40 主题对照数字，
+   **不要**把 bm25 基线的数字当成 T2 的评测结论引用。
 4. **T2 的方案 A 里"向量存 sqlite-vec"改成了纯 Python 索引**：语料只有 22 篇 / 79 片段，
    暴力点积毫秒级；且自己写才能把"每条向量对应哪段原文"显式存下来（溯源前提）。
    理由与取舍见 [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md)。
@@ -333,7 +337,7 @@ cd ../eval && python run_eval.py --arm B   # 单档评测
 
 ---
 
-### ~~T3【P1】Function Calling / 联网检索工具~~ ✅ 已完成（默认关闭，见 [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §6.6）
+### ~~T3【P1】Function Calling / 联网检索工具~~ ✅ 已完成（默认关闭，见 [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md) §6.7）
 
 **目标**
 让 Agent 具备工具调用能力，并新增一个联网检索工具，

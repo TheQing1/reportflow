@@ -47,13 +47,14 @@ class CorpusStore:
         if not self.dir.is_dir():
             return []
         return sorted(
-            p
-            for p in self.dir.rglob("*")
-            if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
+            p for p in self.dir.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
         )
 
     def ensure(
-        self, *, force: bool = False, source: Path | None = None,
+        self,
+        *,
+        force: bool = False,
+        source: Path | None = None,
         replace: bool = False,
     ) -> tuple[bool, int]:
         """知识库为空时，用自带语料初始化。
@@ -127,9 +128,7 @@ class CorpusStore:
         而角标看起来没变，是最难排查的一类问题。
         """
         if len(data) > MAX_FILE_BYTES:
-            raise ValueError(
-                f"文件超过 {MAX_FILE_BYTES // 1024 // 1024}MB 上限：{filename}"
-            )
+            raise ValueError(f"文件超过 {MAX_FILE_BYTES // 1024 // 1024}MB 上限：{filename}")
         raw_name = Path(filename).name
         suffix = Path(raw_name).suffix.lower()
         if suffix not in SUPPORTED_SUFFIXES:

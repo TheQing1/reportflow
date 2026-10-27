@@ -57,9 +57,7 @@ class PlannerAgent(JsonAgent):
         return {"topic": topic, "sections": sections, "outline": outline}
 
     @staticmethod
-    def _normalize(
-        data: dict[str, Any], *, sections: int, topic: str
-    ) -> list[dict[str, Any]]:
+    def _normalize(data: dict[str, Any], *, sections: int, topic: str) -> list[dict[str, Any]]:
         chapters = data.get("chapters")
         if not isinstance(chapters, list) or not chapters:
             raise HandoffError("planner 输出缺少 chapters 数组")
@@ -81,7 +79,5 @@ class PlannerAgent(JsonAgent):
             if not queries:
                 # 不是硬失败：退回章节标题当检索式，比整章中断划算
                 queries = [title]
-            outline.append(
-                {"chapter": idx, "title": title, "queries": queries[:4]}
-            )
+            outline.append({"chapter": idx, "title": title, "queries": queries[:4]})
         return outline

@@ -32,10 +32,7 @@ from app.rag.vector_index import (
 def _vec(text: str, dim: int = 6) -> list[float]:
     """确定性向量：只由文本内容决定，便于断言排序。"""
     total = sum(ord(ch) for ch in text)
-    return [
-        ((total * (i + 1)) % 97) / 97.0 - 0.5
-        for i in range(dim)
-    ]
+    return [((total * (i + 1)) % 97) / 97.0 - 0.5 for i in range(dim)]
 
 
 class _FakeTransport:
@@ -277,26 +274,18 @@ class VectorIndexTest(unittest.TestCase):
 
 class FingerprintTest(unittest.TestCase):
     def test_same_corpus_same_fingerprint(self) -> None:
-        self.assertEqual(
-            corpus_fingerprint("m", CHUNKS), corpus_fingerprint("m", list(CHUNKS))
-        )
+        self.assertEqual(corpus_fingerprint("m", CHUNKS), corpus_fingerprint("m", list(CHUNKS)))
 
     def test_model_changes_fingerprint(self) -> None:
-        self.assertNotEqual(
-            corpus_fingerprint("m1", CHUNKS), corpus_fingerprint("m2", CHUNKS)
-        )
+        self.assertNotEqual(corpus_fingerprint("m1", CHUNKS), corpus_fingerprint("m2", CHUNKS))
 
     def test_text_change_changes_fingerprint(self) -> None:
         changed = [CHUNKS[0], IndexedChunk("d2", "文档二", 3, "改过的段落。")]
-        self.assertNotEqual(
-            corpus_fingerprint("m", CHUNKS), corpus_fingerprint("m", changed)
-        )
+        self.assertNotEqual(corpus_fingerprint("m", CHUNKS), corpus_fingerprint("m", changed))
 
     def test_page_change_changes_fingerprint(self) -> None:
         changed = [CHUNKS[0], CHUNKS[1], IndexedChunk("d2", "文档二", 4, CHUNKS[2].text)]
-        self.assertNotEqual(
-            corpus_fingerprint("m", CHUNKS), corpus_fingerprint("m", changed)
-        )
+        self.assertNotEqual(corpus_fingerprint("m", CHUNKS), corpus_fingerprint("m", changed))
 
     def test_no_separator_collision(self) -> None:
         """分隔符必须存在，否则相邻文本拼接后可能算出同一个指纹。"""

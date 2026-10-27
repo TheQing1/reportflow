@@ -87,9 +87,7 @@ class LLMGateway:
                     last_error = exc
                     self._record(req, model, attempt, None, exc, degraded)
                     if attempt < self._max_retries:
-                        delay = min(
-                            self._backoff_s * (2 ** (attempt - 1)), self._max_backoff_s
-                        )
+                        delay = min(self._backoff_s * (2 ** (attempt - 1)), self._max_backoff_s)
                         self._log.warning(
                             "[%s] LLM 可重试错误 model=%s attempt=%d/%d，%.1fs 后重试: %s",
                             req.tag,
@@ -118,18 +116,14 @@ class LLMGateway:
 
                 if degraded:
                     self.degraded_calls += 1
-                    self._log.warning(
-                        "[%s] 已降级到备用模型 %s", req.tag, model
-                    )
+                    self._log.warning("[%s] 已降级到备用模型 %s", req.tag, model)
                 self.calls += 1
                 if resp.cached:
                     self.cached_calls += 1
                 self._record(req, model, attempt, resp, None, degraded)
                 return replace(resp, degraded=degraded)
 
-        raise LLMUnavailable(
-            f"所有模型均不可用（models={models}）: {last_error}"
-        ) from last_error
+        raise LLMUnavailable(f"所有模型均不可用（models={models}）: {last_error}") from last_error
 
     # ------------------------------------------------ 计量
 

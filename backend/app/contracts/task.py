@@ -106,9 +106,7 @@ class TaskStore(Protocol):
         """从已落库的节点行重建 DAG，用于进程重启后续跑。"""
         ...
 
-    def start_node(
-        self, *, task_id: str, node_id: str, attempt: int, owner: str
-    ) -> bool:
+    def start_node(self, *, task_id: str, node_id: str, attempt: int, owner: str) -> bool:
         """PENDING -> RUNNING 的原子抢占。返回 False 表示已被别人抢先。"""
         ...
 

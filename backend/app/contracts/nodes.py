@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -35,9 +35,7 @@ _TERMINAL = frozenset(
     {NodeStatus.DONE, NodeStatus.FAILED, NodeStatus.BLOCKED, NodeStatus.CANCELLED}
 )
 #: 上游处于这些状态时，下游必须被判为 BLOCKED
-FAILURE_STATES = frozenset(
-    {NodeStatus.FAILED, NodeStatus.BLOCKED, NodeStatus.CANCELLED}
-)
+FAILURE_STATES = frozenset({NodeStatus.FAILED, NodeStatus.BLOCKED, NodeStatus.CANCELLED})
 #: 会向下游传播"不可执行"的状态（含 RETRYING 之外的全部失败态）
 PROPAGATING_STATES = FAILURE_STATES
 
@@ -102,7 +100,7 @@ class Graph:
     def __len__(self) -> int:
         return len(self.nodes)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[NodeSpec]:
         return iter(self.nodes)
 
     def validate(self) -> None:

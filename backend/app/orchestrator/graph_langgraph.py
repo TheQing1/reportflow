@@ -269,16 +269,10 @@ class NodeRunner:
         整章就永久停在 PENDING 了（实测踩到：B 组 3 章只跑完 ch1）。
         """
         by_id = self._nodes()
-        failed = [
-            dep
-            for dep in spec.deps
-            if dep in by_id and by_id[dep].status in FAILURE_STATES
-        ]
+        failed = [dep for dep in spec.deps if dep in by_id and by_id[dep].status in FAILURE_STATES]
         if failed:
             return "block", f"上游失败: {', '.join(failed)}"
-        waiting = [
-            dep for dep in spec.deps if dep not in by_id or by_id[dep].status in _WAITING
-        ]
+        waiting = [dep for dep in spec.deps if dep not in by_id or by_id[dep].status in _WAITING]
         if waiting:
             return "skip", ",".join(waiting)
         return "run", ""
@@ -297,9 +291,7 @@ class NodeRunner:
         # 反而会把它挂在"正在执行"里拖住整个超步，把顺序问题演成随机超时。
         action, reason = self._gate(spec)
         if action == "skip":
-            self.log.debug(
-                "[%s] %s 让路：依赖未就绪(%s)", self._tid, node_id, reason
-            )
+            self.log.debug("[%s] %s 让路：依赖未就绪(%s)", self._tid, node_id, reason)
             return None
         if action == "block":
             self.store.block_node(task_id=self.task_id, node_id=node_id, reason=reason)
@@ -317,9 +309,7 @@ class NodeRunner:
         if self.crash_before == node_id:
             # 先落 RUNNING 再"断电"：库里留下孤儿 RUNNING，
             # 下次启动由 claim_orphans 重置，正好验证这条恢复路径
-            self.log.error(
-                "[%s] 模拟进程崩溃：节点 %s 已置 RUNNING 后立即退出", self._tid, node_id
-            )
+            self.log.error("[%s] 模拟进程崩溃：节点 %s 已置 RUNNING 后立即退出", self._tid, node_id)
             raise SimulatedCrash(f"crash_before={node_id}")
 
         # 上游产出从库里取，不依赖图 state —— 这样重启后依然能复原交接内容
@@ -350,9 +340,7 @@ class NodeRunner:
                     # span_context 让网关知道"这次调用属于哪个任务/节点/轮次"，
                     # Agent 完全不需要感知追踪的存在
                     with span_context(self.task_id, node_id, attempt):
-                        data = await asyncio.wait_for(
-                            agent.execute(ctx), timeout=spec.timeout_s
-                        )
+                        data = await asyncio.wait_for(agent.execute(ctx), timeout=spec.timeout_s)
                 self._assert_json(data, node_id)
             except (SimulatedCrash, SystemExit, KeyboardInterrupt, asyncio.CancelledError):
                 # 进程级事故：直接冒泡，节点保持 RUNNING 留给 claim_orphans 收尸
@@ -558,6 +546,7 @@ def compile_report_graph(
                 return {"findings": {str(chapter): data}}
 
             return research_node
+
         builder.add_node(node_id, make_research(i, node_id), retry_policy=policy)
 
     # ---------------------------------------------------------------- write
@@ -642,9 +631,7 @@ def compile_report_graph(
                 after = runner._load(nid)
                 return {
                     "reviews": {str(chapter): data},
-                    "review_round": {
-                        str(chapter): after.review_round if after else round_now
-                    },
+                    "review_round": {str(chapter): after.review_round if after else round_now},
                     # 记下**回到哪一层**而不是简单的布尔：fix_target=research 时要回
                     # research 节点，回 write 会让被重置的 research 再也没人触发。
                     # 空字符串 = 通过，条件边据此前进去下一章。

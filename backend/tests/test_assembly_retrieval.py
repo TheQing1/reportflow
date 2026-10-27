@@ -49,18 +49,14 @@ class AssemblyRetrievalModeTest(unittest.TestCase):
 
     def test_hybrid_mode_is_wired_through(self) -> None:
         """retrieval_mode=hybrid 必须真的到 rt.retriever，而不是被静默忽略。"""
-        rt = build_runtime(
-            self._settings(retrieval_mode="hybrid"), profile="real", announce=False
-        )
+        rt = build_runtime(self._settings(retrieval_mode="hybrid"), profile="real", announce=False)
         self.assertIsInstance(rt.retriever, HybridRetriever)
         # 没配 embedding key → 优雅降级，但对象本身仍是 hybrid（可观测）
         self.assertEqual(rt.retriever.effective_mode, "bm25")
         self.assertTrue(rt.retriever.degraded_reason)
 
     def test_vector_mode_is_wired_through(self) -> None:
-        rt = build_runtime(
-            self._settings(retrieval_mode="vector"), profile="real", announce=False
-        )
+        rt = build_runtime(self._settings(retrieval_mode="vector"), profile="real", announce=False)
         self.assertIsInstance(rt.retriever, HybridRetriever)
         self.assertEqual(rt.retriever.effective_mode, "bm25")
 
@@ -82,15 +78,11 @@ class AssemblyRetrievalModeTest(unittest.TestCase):
     def test_unknown_mode_fails_fast(self) -> None:
         """配错的模式必须在启动时炸，而不是悄悄跑一份质量下降的报告。"""
         with self.assertRaises(ValueError):
-            build_runtime(
-                self._settings(retrieval_mode="bogus"), profile="real", announce=False
-            )
+            build_runtime(self._settings(retrieval_mode="bogus"), profile="real", announce=False)
 
     def test_reload_works_on_new_retriever(self) -> None:
         """上传文档后 api 会调 reload()；hybrid 档也必须支持，且不联网。"""
-        rt = build_runtime(
-            self._settings(retrieval_mode="hybrid"), profile="real", announce=False
-        )
+        rt = build_runtime(self._settings(retrieval_mode="hybrid"), profile="real", announce=False)
         before = rt.retriever.corpus_size()
         (self.docs / "doc_c.md").write_text(
             "# 新增\n\n2026 年预计新增 13GWh，增速回落至 55%。\n", encoding="utf-8"

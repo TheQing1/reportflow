@@ -1,4 +1,4 @@
-﻿# 阶段五验收记录：编排迁到 LangGraph + 三档检索
+# 阶段五验收记录：编排迁到 LangGraph + 三档检索
 
 环境：Windows 11 / Python 3.12.10 / SQLite（WAL）/ 单进程
 运行目录：`backend/`，`$PY` 代表项目虚拟环境里的 Python（`backend/.venv/Scripts/python.exe`）
@@ -18,12 +18,13 @@
 
 ## 0. 一句话结论
 
-- 测试 **320 passed**（改造前基线 139），`ruff check .` 通过。
+- 测试 **323 passed**（改造前基线 139），`ruff check .` / `ruff format --check` /
+  `mypy app/contracts app/core` 全部通过。
 - **40 主题评测已在 LangGraph 编排下重跑**（`eval/results/v9-langgraph/`，真实模型 + 跨厂商判官）。
   三档全部 40/40 成功：覆盖率 A 73.2% / B 77.5% / C 79.3%，
   语义支持率 A 93.3% / B 98.2% / C 99.8%。
   与改造前 v6 相比三档绝对值都在同量级，**换编排没有造成质量数量级变化**。
-- **工具调用 + 联网检索已可用但默认关闭**（T3，见 §6.6）。真实模型实测能自主决定
+- **工具调用 + 联网检索已可用但默认关闭**（T3，见 §6.7）。真实模型实测能自主决定
   「先查本地、不够再联网」，真实联网能拿到正规媒体的可引用摘要。
   默认关闭是刻意的：一开联网，40 主题评测就不再可复现。
 - **重跑过程抓到一个只在 C 档出现的真 bug**（打回 `fix_target=research` 时死循环到
@@ -485,13 +486,13 @@ LangGraph 的 state 只做**推进与路由的簿记**；节点 `status` / `outp
 ```bash
 cd backend
 $PY -m pytest -q
-# 320 passed, 1 warning
+# 323 passed, 1 warning
 ```
 
 那个 warning 是 langgraph 上游的 `LangChainPendingDeprecationWarning`（`allowed_objects` 默认值将来会变），
 与本项目代码无关。
 
-大数关系：**改造前基线 139 + 本轮新增 181 = 320 passed**。
+大数关系：**改造前基线 139 + 本轮新增 184 = 323 passed**。
 
 其中新增用例的主要落点（只列重点，不复述全部）：`test_graph_langgraph.py` **28 条**
 （图构建、并行/串行、阻塞传播、断点续跑、打回闭环、四种拓扑组合矩阵）、
@@ -501,12 +502,16 @@ $PY -m pytest -q
 防"工厂单测全绿、生产永远只跑 bm25"）。
 
 **同时删掉了 16 条**：`test_dag.py`（9 条）与 `test_scheduler.py`（7 条）的被测对象已不存在，
-覆盖转移到 `test_graph_langgraph.py`。所以"320"不是"139 条原封不动再加 181 条新的"，
+覆盖转移到 `test_graph_langgraph.py`。所以"323"不是"139 条原封不动再加 184 条新的"，
 而是删旧补新的净结果。
 
 ```bash
 $PY -m ruff check .
 # All checks passed!
+$PY -m ruff format --check .
+# 83 files already formatted
+$PY -m mypy app/contracts app/core
+# Success: no issues found in 14 source files
 ```
 
 ### 6.2 实测版本
@@ -564,7 +569,7 @@ $PY -m ruff check .
 
 ---
 
-## 6.5 40 主题评测重跑（本轮新增）
+## 6.6 40 主题评测重跑（本轮新增）
 
 **这一步是补掉改造前最大的可信度缺口**：README 原先引用的三档数字来自自研编排，
 "这些数据对应现在的代码吗"无法回答。现在可以了。
@@ -607,7 +612,7 @@ $PY -m ruff check .
 
 ---
 
-## 6.6 工具调用（T3）：Function Calling + 联网检索
+## 6.7 工具调用（T3）：Function Calling + 联网检索
 
 **目标**：让 Researcher 能自己决定「还要不要查」，并补掉「不具备实时联网检索」这条边界。
 
@@ -679,9 +684,43 @@ $PY -m ruff check .
 
 ---
 
+## 6.8 收尾审计：功能之外、但会让人当场问住的问题
+
+T1–T3 做完后对这个仓库做了一遍**交付前审计**。判据不是"功能能不能跑"，
+而是"别人 clone 下来/面试官点开会不会立刻发现不一致"。查出四类，都已修：
+
+| # | 问题 | 为什么不报错 | 修法 |
+|---|---|---|---|
+| 1 | `pyproject.toml` 漏声明 `app.tools` 子包 | 本地 `cwd` 在 `sys.path` 上，`import app.tools` 照样成功；只有 `pip install .` 到干净环境才 `ModuleNotFoundError` | 补声明，并加 `TestPackaging` 双向校验（声明↔磁盘必须一致），做变异测试确认删掉后会红 |
+| 2 | `mypy` 声明了 `strict` 覆盖 `contracts`/`core`，但**从没在 CI 里跑过**，实际有 8 个错误 | 配置写了 ≠ 被执行。`pyproject.toml` 里 `[[tool.mypy.overrides]]` 看起来像"已经在做类型检查" | 修完 8 条，把 `mypy app/contracts app/core` 加进 CI 与 pre-commit |
+| 3 | `ruff format` 一次性会改 49 个文件，但 pre-commit 与 CI 都不跑它 | 只跑 `ruff check`（lint）不跑 `ruff format`（排版），代码会在两种状态间长期漂移 | 全量格式化一次；CI 加 `ruff format --check`；pre-commit 的 ruff 从 `v0.8.4` 升到 `v0.17.2` 与 dev 依赖对齐 |
+| 4 | `STAGE5_ACCEPTANCE.md` 出现两个 `## 6.5`、两个 `## 6.6` | Markdown 不校验编号，肉眼扫目录才会发现 | 重排为 6.5→6.8 连续，并同步全部 `§6.x` 交叉引用 |
+
+**第 2 条是这次审计里最值得记的一条**：`pyproject.toml` 里那段 `strict = true` 的
+override 从阶段一就写在那儿，一直没人跑过 mypy，于是它只是"看起来很严格"。
+这正是"配置即文档"的陷阱——读者会把它当成事实，而事实只有执行了才算。
+
+修的过程中还挖出两个**真的会算错数**的隐患：
+
+- `Fact.from_dict` 的 `page` 解析原来写 `int(page_raw) if page_raw not in (None, "")`。
+  模型返回 `"12.5"` 时 `int()` 抛 `ValueError` 被兜底成 `None`（正确），
+  但返回 `True` 时会静默变成**第 1 页**——`bool` 是 `int` 的子类。
+  页码是溯源证据的一部分，静默改数比丢页码更糟。现改为显式判类型，
+  `bool`/`dict`/`"P.12"` 一律置 `None`，并有 9 个 subTest 覆盖。
+- `_UtcFormatter.converter = time.gmtime` 依赖基类实现细节（格式化时总会传
+  timestamp）。签名对不上是小事，上游改成不传参就是运行期 `TypeError`。
+  改为显式方法后日志输出逐字不变（已比对实际输出）。
+
+**没有改的部分**：`ruff format` 的作用范围经过核对——49 个文件的改动全是排版，
+唯一涉及字符串的是 `app/api/__init__.py` 一处 docstring 缩进。
+也就是说 **所有 LLM prompt 字面量逐字未变**，40 主题评测基线（`v9-langgraph`）不受影响。
+这一点是刻意验证的：prompt 一改，缓存 key 与基线就同时失效，那才是真正不能接受的代价。
+
+---
+
 ## 7. 未完成项（明确记录，不含糊）
 
-1. **~~40 主题评测没在 LangGraph 改造后重跑~~ → 已完成**，见 §6.5。
+1. **~~40 主题评测没在 LangGraph 改造后重跑~~ → 已完成**，见 §6.6。
    注意结论有变化：覆盖率提升**不显著**了，别再引用 v6 的 +7.7pp 当本轮结论。
 2. **`vector` / `hybrid` 没有 40 主题三档量化对照**。只有 §6.3 的单主题实测。
    按 `docs/REPEAT_RATE.md` 的先例，如实报告"在你的语料规模下 hybrid 未必更好"同样是有价值的结论，
@@ -711,8 +750,10 @@ $PY -m ruff check .
 cd backend
 
 # 1) 测试与静态检查
-$PY -m pytest -q          # 320 passed
+$PY -m pytest -q          # 323 passed
 $PY -m ruff check .        # 全仓库，All checks passed
+$PY -m ruff format --check .
+$PY -m mypy app/contracts app/core   # strict 两层
 
 # 2) 单档端到端（bm25 默认，不联网，命中录制缓存时成本 ¥0）
 $PY -m app.cli doctor

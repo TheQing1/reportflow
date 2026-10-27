@@ -121,9 +121,7 @@ def create_app(
             "review_in_pipeline": settings.review_in_pipeline,
             "retrieval_mode": settings.retrieval_mode,
             "retrieval_effective": effective or settings.retrieval_mode,
-            "retrieval_degraded": str(
-                getattr(retriever, "degraded_reason", "") or ""
-            ),
+            "retrieval_degraded": str(getattr(retriever, "degraded_reason", "") or ""),
             "embedding_model": settings.embedding_model
             if (effective or settings.retrieval_mode) != "bm25"
             else "",
@@ -402,5 +400,6 @@ async def _event_stream(rt: Runtime, task_id: str) -> AsyncIterator[bytes]:
             yield frame("done", {"task_id": task_id, "status": task.status.value})
             return
         await asyncio.sleep(POLL_INTERVAL_S)
+
 
 __all__ = ["create_app"]

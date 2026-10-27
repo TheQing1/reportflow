@@ -298,7 +298,7 @@ TIMESTAMP = re.compile(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}.*(发布|来源|作者|记
 
 #: HTML 属性残留。标签剥离失败时（属性里带引号、标签未闭合）会漏出这种东西，
 #: 它长得像内容但完全不可读，而且会污染检索词表。
-HTML_LEFTOVER = re.compile(r'(data-[a-z-]+=|class=|href=|style=|onclick=|\.sub-menu|<[a-z/])')
+HTML_LEFTOVER = re.compile(r"(data-[a-z-]+=|class=|href=|style=|onclick=|\.sub-menu|<[a-z/])")
 
 _SENTENCE_PUNCT = re.compile(r"[。，、！？；：,.!?;:]")
 
@@ -353,14 +353,10 @@ def _keep(text: str, *, is_heading: bool) -> bool:
 
 def extract_text(raw: str) -> list[str]:
     """抽取正文段落。宁可少抽，也不要把导航混进来——假内容比少内容更糟。"""
-    cleaned = re.sub(
-        r"<(script|style|noscript|iframe|svg)\b.*?</\1>", "", raw, flags=re.S | re.I
-    )
+    cleaned = re.sub(r"<(script|style|noscript|iframe|svg)\b.*?</\1>", "", raw, flags=re.S | re.I)
 
     blocks: list[tuple[str, bool]] = []
-    for m in re.finditer(
-        r"<(h[1-4]|p|li)\b[^>]*>(.*?)</\1>", cleaned, flags=re.S | re.I
-    ):
+    for m in re.finditer(r"<(h[1-4]|p|li)\b[^>]*>(.*?)</\1>", cleaned, flags=re.S | re.I):
         tag, inner = m.group(1).lower(), m.group(2)
         text = _text_of(inner)
         if not text:
@@ -393,9 +389,7 @@ def extract_text(raw: str) -> list[str]:
     return out
 
 
-_META_CHARSET = re.compile(
-    rb"<meta[^>]+charset\s*=\s*[\"']?\s*([a-zA-Z0-9\-_]+)", re.I
-)
+_META_CHARSET = re.compile(rb"<meta[^>]+charset\s*=\s*[\"']?\s*([a-zA-Z0-9\-_]+)", re.I)
 
 
 def fetch(url: str, *, timeout: float = 25.0) -> str:
@@ -406,7 +400,9 @@ def fetch(url: str, *, timeout: float = 25.0) -> str:
     而且**不报错**——乱码文档会安静地污染整个知识库。
     """
     with httpx.Client(
-        headers={"User-Agent": UA}, timeout=timeout, follow_redirects=True,
+        headers={"User-Agent": UA},
+        timeout=timeout,
+        follow_redirects=True,
         trust_env=False,
     ) as client:
         r = client.get(url)

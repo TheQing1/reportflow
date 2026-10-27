@@ -49,17 +49,13 @@ def _chapter(text: str) -> int:
 
 def _user_text(payload: dict[str, Any]) -> str:
     return "\n".join(
-        m.get("content", "")
-        for m in payload.get("messages", [])
-        if m.get("role") == "user"
+        m.get("content", "") for m in payload.get("messages", []) if m.get("role") == "user"
     )
 
 
 def _system_text(payload: dict[str, Any]) -> str:
     return "\n".join(
-        m.get("content", "")
-        for m in payload.get("messages", [])
-        if m.get("role") == "system"
+        m.get("content", "") for m in payload.get("messages", []) if m.get("role") == "system"
     )
 
 

@@ -120,6 +120,17 @@ make dev                    # 同上（Linux / macOS）
 
 常用命令见 `make help`：测试 / lint / 切语料 / 起容器都在里面。
 
+质量门禁（CI 每次推送都跑，本地 `make lint` / `make test` 等价）：
+
+| 检查 | 命令 | 覆盖范围 |
+|---|---|---|
+| 测试 | `pytest -q` | **323 条**，全离线（fake/scripted LLM，不联网、无需 key） |
+| Lint | `ruff check .` | 全仓库 |
+| 格式 | `ruff format --check .` | 全仓库（不只 lint，排版也锁住） |
+| 类型 | `mypy app/contracts app/core` | 域模型与配置两层开 `strict`，其余层刻意不严 |
+| 构建 | `npm run build` + `docker build` | 前端产物与两个镜像 |
+| 架构 | `tests/test_layering.py` | 用 AST 强制分层依赖方向，越界即失败 |
+
 **没有 key 也能跑开发**：默认 `LLM_MODE=auto`，第一次真调后写入 `data/llm_cache/`，之后命中缓存——毫秒级、结果逐字一致、成本 ¥0。要验收真实生成效果时传 `--live`。
 
 命令行同样可用（不启前端）：

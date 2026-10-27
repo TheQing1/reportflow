@@ -56,10 +56,18 @@ cd eval && python run_eval.py --arm B          # 单档评测
 ## 4. 代码风格
 
 - Python：ruff（`line-length = 100`，规则见 `backend/pyproject.toml`）
-- 提交前：`pre-commit install`，之后每次 commit 自动格式化
+  - `ruff check` 管 lint，`ruff format` 管排版，**两者都进 CI**。
+    只跑前者会让代码在"格式化过"与"没格式化过"两种状态之间长期漂移。
+  - pre-commit 里锁的 ruff 版本与 `requirements-dev.txt` 保持一致（现为 `v0.17.2`）。
+    版本不一致时，pre-commit 放过的东西会被 CI 的 `format --check` 拦下，
+    表现为"我本地明明是绿的"。
+- 类型：`mypy` 只对 `app/contracts` 与 `app/core` 开 `strict`
+  （域模型与配置值得严；其余层与第三方库的 `Any` 交互太多，强开只会产生 noise）。
+  这条**有 CI 执行**，不是写在 `pyproject.toml` 里就算数。
+- 提交前：`pre-commit install`，之后每次 commit 自动格式化 + 类型检查
 
 ```bash
-make lint     # 只检查
+make lint     # lint + format --check + mypy，与 CI 等价
 make fmt      # 自动修复 + 格式化
 ```
 

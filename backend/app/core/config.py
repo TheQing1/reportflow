@@ -162,23 +162,16 @@ class Settings:
             llm_price_input_per_m=float(get("LLM_PRICE_INPUT_PER_M", "1.0")),
             llm_price_output_per_m=float(get("LLM_PRICE_OUTPUT_PER_M", "3.0")),
             llm_mode=get("LLM_MODE", "live").strip().lower(),
-            llm_cache_dir=get("LLM_CACHE_DIR", "").strip()
-            or str(DEFAULT_LLM_CACHE_DIR),
+            llm_cache_dir=get("LLM_CACHE_DIR", "").strip() or str(DEFAULT_LLM_CACHE_DIR),
             llm_judge_model=get("LLM_JUDGE_MODEL", "").strip(),
             llm_judge_base_url=get("LLM_JUDGE_BASE_URL", "").strip(),
             llm_judge_api_key=get("LLM_JUDGE_API_KEY", "").strip(),
-            llm_judge_price_input_per_m=float(
-                get("LLM_JUDGE_PRICE_INPUT_PER_M", "0") or 0
-            ),
-            llm_judge_price_output_per_m=float(
-                get("LLM_JUDGE_PRICE_OUTPUT_PER_M", "0") or 0
-            ),
+            llm_judge_price_input_per_m=float(get("LLM_JUDGE_PRICE_INPUT_PER_M", "0") or 0),
+            llm_judge_price_output_per_m=float(get("LLM_JUDGE_PRICE_OUTPUT_PER_M", "0") or 0),
             llm_judge_extra=get("LLM_JUDGE_EXTRA_JSON", "").strip(),
             docs_dir=docs_dir,
             retrieval_mode=get("RETRIEVAL_MODE", "bm25").strip().lower(),
-            embedding_base_url=get(
-                "EMBEDDING_BASE_URL", "https://api.siliconflow.cn/v1"
-            ).strip(),
+            embedding_base_url=get("EMBEDDING_BASE_URL", "https://api.siliconflow.cn/v1").strip(),
             embedding_api_key=get("EMBEDDING_API_KEY", "").strip(),
             embedding_model=get("EMBEDDING_MODEL", "BAAI/bge-m3").strip(),
             embedding_timeout_s=float(get("EMBEDDING_TIMEOUT", "30")),
@@ -187,8 +180,7 @@ class Settings:
             vector_index_dir=get("VECTOR_INDEX_DIR", "").strip()
             or str(PROJECT_ROOT / "data" / "vector_index"),
             enable_tools=get("ENABLE_TOOLS", "false").lower() in {"1", "true", "yes"},
-            enable_web_search=get("ENABLE_WEB_SEARCH", "false").lower()
-            in {"1", "true", "yes"},
+            enable_web_search=get("ENABLE_WEB_SEARCH", "false").lower() in {"1", "true", "yes"},
             tool_max_rounds=max(1, int(get("TOOL_MAX_ROUNDS", "3"))),
             web_search_top_k=max(1, min(5, int(get("WEB_SEARCH_TOP_K", "3")))),
         )

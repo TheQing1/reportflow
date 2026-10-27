@@ -16,12 +16,32 @@ from app.rag.budget import allocate_doc_budgets, overlap
 from app.rag.corpus import LocalCorpusRetriever
 
 DOCS = [
-    Document(doc_id="doc_a", title="规模", text="储能行业 2025 年新增装机 8.4GWh，同比增长 62%，规模持续扩大。"),
-    Document(doc_id="doc_b", title="区域", text="储能项目在浙江、广东、江苏三省合计占比 55% 以上，区域集中度很高。"),
-    Document(doc_id="doc_c", title="成本", text="储能系统均价降至 0.48 元/Wh，同比下降 31%，造价持续下行。"),
-    Document(doc_id="doc_d", title="政策", text="储能政策方面，23 个省级行政区出台容量补偿机制，框架逐步建立。"),
-    Document(doc_id="doc_e", title="竞争", text="储能系统集成 CR5 约 38%，集中度提升但绝对水平不高。"),
-    Document(doc_id="doc_f", title="展望", text="储能展望：预计 2026 年新增装机 6000 万千瓦，增速回落。"),
+    Document(
+        doc_id="doc_a",
+        title="规模",
+        text="储能行业 2025 年新增装机 8.4GWh，同比增长 62%，规模持续扩大。",
+    ),
+    Document(
+        doc_id="doc_b",
+        title="区域",
+        text="储能项目在浙江、广东、江苏三省合计占比 55% 以上，区域集中度很高。",
+    ),
+    Document(
+        doc_id="doc_c",
+        title="成本",
+        text="储能系统均价降至 0.48 元/Wh，同比下降 31%，造价持续下行。",
+    ),
+    Document(
+        doc_id="doc_d",
+        title="政策",
+        text="储能政策方面，23 个省级行政区出台容量补偿机制，框架逐步建立。",
+    ),
+    Document(
+        doc_id="doc_e", title="竞争", text="储能系统集成 CR5 约 38%，集中度提升但绝对水平不高。"
+    ),
+    Document(
+        doc_id="doc_f", title="展望", text="储能展望：预计 2026 年新增装机 6000 万千瓦，增速回落。"
+    ),
 ]
 
 

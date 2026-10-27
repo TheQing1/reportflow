@@ -231,9 +231,7 @@ class GatewayCachedCostTest(unittest.TestCase):
                 spans.append(span)
 
         def build(mode: CacheMode) -> LLMGateway:
-            transport = CachedTransport(
-                _CountingTransport(), mode=mode, cache_dir=self.dir
-            )
+            transport = CachedTransport(_CountingTransport(), mode=mode, cache_dir=self.dir)
             return LLMGateway(
                 transport,
                 primary_model="m1",
@@ -295,9 +293,7 @@ class ReplayMissNoRetryTest(unittest.TestCase):
                 raise ReplayMiss("测试：缺缓存")
 
         registry = AgentRegistry({**inner, NodeType.WRITE: _Boom()})
-        runner = TaskRunner(
-            store=rt.store, registry=registry, settings=settings, profile="mock"
-        )
+        runner = TaskRunner(store=rt.store, registry=registry, settings=settings, profile="mock")
         task_id, _ = runner.submit(topic="不可重试", sections=1)
         asyncio.run(runner.run(task_id))
 

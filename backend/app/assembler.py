@@ -113,9 +113,7 @@ def build_runtime(
                 max_retries=settings.llm_max_retries,
                 backoff_s=settings.llm_backoff_s,
                 prices={
-                    m: ModelPrice(
-                        settings.llm_price_input_per_m, settings.llm_price_output_per_m
-                    )
+                    m: ModelPrice(settings.llm_price_input_per_m, settings.llm_price_output_per_m)
                     for m in (settings.llm_model_primary, settings.llm_model_fallback)
                     if m
                 },
@@ -129,7 +127,11 @@ def build_runtime(
                 primary=settings.llm_model_primary,
             )
             if judge_llm is not None:
-                log.info("判官模型已独立：%s（生成用 %s）", settings.llm_judge_model, settings.llm_model_primary)
+                log.info(
+                    "判官模型已独立：%s（生成用 %s）",
+                    settings.llm_judge_model,
+                    settings.llm_model_primary,
+                )
         # 三档检索走同一条装配路径（见 rag/corpus.py:build_retriever）：
         # bm25 就是原来那个对象；hybrid/vector 内部仍以 BM25 的片段表为文本权威。
         # 注意这里**不能**在检索模式配置错误时静默兜底——build_retriever 会抛错，
@@ -239,9 +241,7 @@ def _build_judge_gateway(
                     "LLM_JUDGE_EXTRA_JSON 不是对象，已忽略：%s", settings.llm_judge_extra
                 )
         except ValueError as exc:
-            get_logger("assembler").warning(
-                "LLM_JUDGE_EXTRA_JSON 解析失败，已忽略：%s", exc
-            )
+            get_logger("assembler").warning("LLM_JUDGE_EXTRA_JSON 解析失败，已忽略：%s", exc)
 
     transport: object = OpenAICompatibleTransport(
         settings.llm_judge_base_url or settings.llm_base_url,
@@ -265,10 +265,8 @@ def _build_judge_gateway(
         # 没填就退回主模型单价，并在日志里说明这是估算。
         prices={
             judge_model: ModelPrice(
-                settings.llm_judge_price_input_per_m
-                or settings.llm_price_input_per_m,
-                settings.llm_judge_price_output_per_m
-                or settings.llm_price_output_per_m,
+                settings.llm_judge_price_input_per_m or settings.llm_price_input_per_m,
+                settings.llm_judge_price_output_per_m or settings.llm_price_output_per_m,
             )
         },
         recorder=SqlSpanRecorder(session_factory),  # type: ignore[arg-type]

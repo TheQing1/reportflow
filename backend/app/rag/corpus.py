@@ -105,8 +105,7 @@ class LocalCorpusRetriever:
             df.update(toks.keys())
         n = len(self._chunks)
         self._idf = {
-            term: math.log(1 + (n - freq + 0.5) / (freq + 0.5))
-            for term, freq in df.items()
+            term: math.log(1 + (n - freq + 0.5) / (freq + 0.5)) for term, freq in df.items()
         }
 
     @classmethod
@@ -165,9 +164,7 @@ class LocalCorpusRetriever:
     def doc_ids(self) -> list[str]:
         return sorted({c.doc_id for c in self._chunks})
 
-    async def search(
-        self, query: str, *, top_k: int = 4, chapters_hint: str = ""
-    ) -> list[Snippet]:
+    async def search(self, query: str, *, top_k: int = 4, chapters_hint: str = "") -> list[Snippet]:
         if not self._chunks:
             return []
         q_tokens = tokenize(f"{query} {chapters_hint}")

@@ -21,7 +21,12 @@ import re
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+# 同层类型只在类型检查期 import：运行期由 `to_llm_spec` 内部延迟导入，
+# 让 contracts.tools 与 contracts.llm 的 import 顺序不成环。
+if TYPE_CHECKING:
+    from .llm import LLMToolSpec
 
 #: 单次工具结果回给模型的最大字符数。
 #:
@@ -61,7 +66,9 @@ class ToolResult:
 
     @classmethod
     def failure(cls, message: str, *, elapsed_ms: int = 0) -> ToolResult:
-        return cls(ok=False, error=message, content=f"工具执行失败：{message}", elapsed_ms=elapsed_ms)
+        return cls(
+            ok=False, error=message, content=f"工具执行失败：{message}", elapsed_ms=elapsed_ms
+        )
 
     def to_model_text(self) -> str:
         """回填给模型的文本。成功=内容，失败=原因（让模型知道要换策略）。"""
@@ -78,7 +85,7 @@ class ToolSpec:
     #: 单次调用超时（秒）。必须小于节点超时，否则节点先被杀、拿不到失败信息。
     timeout_s: float = 20.0
 
-    def to_llm_spec(self):  # -> LLMToolSpec
+    def to_llm_spec(self) -> LLMToolSpec:
         # 延迟 import：contracts.llm 与 contracts.tools 同层，但避免顶层互相 import 造成环
         from .llm import LLMToolSpec
 
@@ -149,7 +156,7 @@ class ToolRegistry:
         """本轮已收集的片段（供溯源校验合并证据池）。"""
         return tuple(self._items)
 
-    def llm_specs(self) -> tuple[Any, ...]:
+    def llm_specs(self) -> tuple[LLMToolSpec, ...]:
         """转成 LLM 侧的工具声明。空表示不给模型任何工具（退化为纯文本补全）。"""
         return tuple(t.spec.to_llm_spec() for t in self._tools.values())
 

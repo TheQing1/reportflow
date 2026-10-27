@@ -77,9 +77,7 @@ def _build_settings(args: argparse.Namespace) -> Settings:
 def _runtime(args: argparse.Namespace) -> Runtime:
     settings = _build_settings(args)
     setup_logging(settings.log_level)
-    mock_config = MockAgentConfig(
-        fail_nodes=frozenset(getattr(args, "fail_node", None) or ())
-    )
+    mock_config = MockAgentConfig(fail_nodes=frozenset(getattr(args, "fail_node", None) or ()))
     return build_runtime(
         settings,
         profile=getattr(args, "profile", "mock"),
@@ -157,10 +155,7 @@ def print_status(rt: Runtime, task_id: str) -> None:
     if not nodes:
         print("（无节点）")
         return
-    print(
-        f"{'NODE':<16}{'TYPE':<10}{'STATUS':<10}{'ATT':<5}"
-        f"{'DEPS':<30}{'ms':<8}NOTE"
-    )
+    print(f"{'NODE':<16}{'TYPE':<10}{'STATUS':<10}{'ATT':<5}{'DEPS':<30}{'ms':<8}NOTE")
     print(_bar("-"))
     for n in nodes:
         deps = ",".join(n.deps) or "-"
@@ -173,9 +168,7 @@ def print_status(rt: Runtime, task_id: str) -> None:
     counts = rt.store.count_nodes_by_status(task_id)
     done = counts.get(NodeStatus.DONE, 0)
     total = len(nodes)
-    summary = "  ".join(
-        f"{s.value}={counts[s]}" for s in NodeStatus if counts.get(s)
-    )
+    summary = "  ".join(f"{s.value}={counts[s]}" for s in NodeStatus if counts.get(s))
     print(f"合计 {done}/{total} 完成 | {summary or '无'}")
 
 
@@ -336,9 +329,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     chapters = built.chapters
     refs = built.references
 
-    out = Path(args.out) if args.out else (
-        PROJECT_ROOT / "data" / "output" / f"{task.id}.md"
-    )
+    out = Path(args.out) if args.out else (PROJECT_ROOT / "data" / "output" / f"{task.id}.md")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(built.markdown, encoding="utf-8")
     print(f"已导出：{out}")
@@ -401,7 +392,7 @@ def cmd_cache(args: argparse.Namespace) -> int:
     print(_bar("-"))
     if info["files"] == 0:
         print("缓存为空。录制一次（会产生真实费用）：")
-        print("  LLM_MODE=record python -m app.cli run --profile real --topic \"...\" --sections 5")
+        print('  LLM_MODE=record python -m app.cli run --profile real --topic "..." --sections 5')
         print("之后把 LLM_MODE 改成 replay 或 auto，同一任务不再联网。")
     else:
         print("开发（零成本、确定性、毫秒级）：LLM_MODE=auto")
@@ -501,19 +492,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     key = (settings.llm_api_key or "").strip()
     placeholder = (not key) or key.startswith("sk-your") or "your-key" in key
-    masked = (
-        "<空>"
-        if not key
-        else (key[:6] + "…" + key[-4:] if len(key) > 12 else "***")
-    )
+    masked = "<空>" if not key else (key[:6] + "…" + key[-4:] if len(key) > 12 else "***")
 
     print(_bar("="))
     print("配置检查")
     print(_bar("-"))
     print(f"database    : {settings.database_url}")
     print(f"llm_base_url: {settings.llm_base_url}")
-    print(f"model       : {settings.llm_model_primary}"
-          f"{' → 降级 ' + settings.llm_model_fallback if settings.llm_model_fallback else ''}")
+    print(
+        f"model       : {settings.llm_model_primary}"
+        f"{' → 降级 ' + settings.llm_model_fallback if settings.llm_model_fallback else ''}"
+    )
     print(f"llm_api_key : {masked}{'  ← 仍是占位符，需要填真实 key' if placeholder else ''}")
     print(f"llm_timeout : {settings.llm_timeout_s}s（节点超时 {settings.node_timeout_s}s）")
     try:
@@ -577,10 +566,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         return judge_code
     print(_bar("="))
     print("配置可用。跑一章试试：")
-    print('  python -m app.cli run --profile real --topic "2026 年中国工商业储能行业" '
-          "--sections 1")
+    print('  python -m app.cli run --profile real --topic "2026 年中国工商业储能行业" --sections 1')
     return EXIT_OK
-
 
 
 def cmd_corpus(args: argparse.Namespace) -> int:
@@ -658,9 +645,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="live=直连不缓存；record=调用并落盘；replay=只读缓存；auto=命中回放/未命中联网",
     )
     common.add_argument("--llm-cache-dir", help="覆盖 LLM_CACHE_DIR（默认 data/llm_cache）")
-    common.add_argument(
-        "--max-review-rounds", type=int, help="每章允许被打回的轮数上限"
-    )
+    common.add_argument("--max-review-rounds", type=int, help="每章允许被打回的轮数上限")
 
     parser = argparse.ArgumentParser(
         prog="python -m app.cli", description="ReportFlow 阶段一 CLI（Mock Agent）"
@@ -684,9 +669,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NODE_ID",
         help="该节点启动后立即退出进程，用于验证断点续跑",
     )
-    run_p.add_argument(
-        "--reset-failed", action="store_true", help="先把失败/阻塞节点重置再跑"
-    )
+    run_p.add_argument("--reset-failed", action="store_true", help="先把失败/阻塞节点重置再跑")
     run_p.add_argument(
         "--review",
         action="store_true",

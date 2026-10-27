@@ -56,9 +56,7 @@ class AgentRegistry:
         try:
             return self._agents[node_type]
         except KeyError:
-            raise LookupError(
-                f"没有为节点类型 {node_type.value} 注册 Agent"
-            ) from None
+            raise LookupError(f"没有为节点类型 {node_type.value} 注册 Agent") from None
 
     def registered_types(self) -> set[NodeType]:
         return set(self._agents)

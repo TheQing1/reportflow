@@ -100,6 +100,7 @@ def _relevant_window(sentence: str, source: str) -> str:
     snippet = source[lo:hi]
     return snippet or source[: _MAX_SOURCE_CHARS * 2]
 
+
 _SYSTEM = """[task:audit] 你是引用核查员。任务：判断正文里的每一句断言，是否被它所引用的原文支持。
 
 判定口径（三选一）：
@@ -160,9 +161,7 @@ class SupportReport:
         return (self.supported + 0.5 * self.weak) / self.total
 
 
-def sample_assertions(
-    chapter_texts: Sequence[str], *, per_chapter: int = 3
-) -> list[Assertion]:
+def sample_assertions(chapter_texts: Sequence[str], *, per_chapter: int = 3) -> list[Assertion]:
     """每章抽「最容易脱离原文」的 N 条断言，而不是前 N 条。
 
     第一版按顺序取前 2 条，结果是三档方案的语义支持率都在 96~97%，

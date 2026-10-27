@@ -1,0 +1,41 @@
+chore: 交付前审计——修掉四类「声明了但没执行」的问题
+
+T1–T3 做完后对整个仓库做了一遍交付前审计。判据不是「功能能不能跑」，
+而是「别人 clone 下来 / 面试官点开会不会立刻发现不一致」。查出四类：
+
+1. pyproject 漏声明 app.tools 子包
+   本地 cwd 在 sys.path 上，import app.tools 永远成功；只有 `pip install .`
+   到干净环境（Docker 镜像、被别人安装）才 ModuleNotFoundError。
+   补声明，并新增 TestPackaging 双向校验（声明↔磁盘一致），
+   已做变异测试确认删掉 app.tools 后测试会红。
+
+2. mypy 声明 strict 覆盖 contracts/core，但 CI 从未执行，实际 8 个错误
+   pyproject 里那段 [[tool.mypy.overrides]] 从阶段一就写在那儿，从没被跑过。
+   典型的「配置即文档」陷阱：读者会把它当成事实，而事实只有执行了才算。
+   修完 8 条，并把 `mypy app/contracts app/core` 加进 CI 与 pre-commit。
+
+3. ruff format 与 pre-commit 互相矛盾
+   CI/pre-commit 只跑 ruff check（lint），从没跑过 ruff format（排版），
+   代码长期在两种状态间漂移；且 pre-commit 锁 v0.8.4 而 dev 依赖装到 0.17.2。
+   全量格式化一次（49 文件，纯排版），CI 加 `ruff format --check`，
+   pre-commit 升到 v0.17.2，requirements-dev 下界 0.6 → 0.17。
+
+4. STAGE5_ACCEPTANCE.md 出现重复的 ## 6.5 / ## 6.6
+   Markdown 不校验编号，肉眼扫目录才会发现。重排为 6.5→6.8 连续，
+   并同步全部 §6.x 交叉引用。
+
+修的过程中挖出两个真的会算错的隐患：
+
+- Fact.from_dict 的 page 解析：`int(page_raw) if page_raw not in (None, "")`
+  在模型返回 True 时会静默变成第 1 页（bool 是 int 的子类）。
+  页码是溯源证据的一部分，静默改数比丢页码更糟。改为显式判类型，
+  bool/dict/"P.12"/"12.5" 一律置 None，9 个 subTest 覆盖。
+- _UtcFormatter.converter = time.gmtime 依赖基类实现细节（格式化时总会传
+  timestamp）。签名对不上是小事，上游改成不传参就是运行期 TypeError。
+  改为显式方法后日志输出逐字不变（已比对实际输出）。
+
+安全边界：格式化未改动任何 LLM prompt 字面量（唯一涉及字符串的是
+api/__init__.py 一处 docstring 缩进），40 主题评测基线 v9-langgraph 不受影响。
+这条是刻意验证的——prompt 一改，缓存 key 与基线就同时失效。
+
+验证：323 passed / ruff check / ruff format --check / mypy strict / 前端构建 全绿。

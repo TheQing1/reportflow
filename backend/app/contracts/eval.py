@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class Arm(str, Enum):
@@ -75,7 +76,7 @@ class CaseMetrics:
     semantic_unsupported: int = 0
     semantic_weak: int = 0
     semantic_skipped: int = 0
-    semantic_issues: list[dict] = field(default_factory=list)
+    semantic_issues: list[dict[str, Any]] = field(default_factory=list)
     # ---- 成本与耗时 ----
     cost: float = 0.0
     llm_calls: int = 0
@@ -85,7 +86,7 @@ class CaseMetrics:
     #: 正文全文，落盘以便复查与指标重算（不参与报告展示）
     text: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "case_id": self.case_id,
             "arm": self.arm.value,
@@ -112,13 +113,12 @@ class CaseMetrics:
             "error": self.error,
             "text": self.text,
             "covered": [
-                {"item": c.item, "covered": c.covered, "evidence": c.evidence}
-                for c in self.covered
+                {"item": c.item, "covered": c.covered, "evidence": c.evidence} for c in self.covered
             ],
         }
 
     @classmethod
-    def from_dict(cls, raw: dict) -> CaseMetrics:
+    def from_dict(cls, raw: dict[str, Any]) -> CaseMetrics:
         """断点续跑用：从落盘的 JSON 还原。"""
         return cls(
             case_id=raw["case_id"],

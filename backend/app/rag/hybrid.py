@@ -52,9 +52,7 @@ DEFAULT_RRF_K = 60
 T = TypeVar("T", bound=Hashable)
 
 
-def rrf_fuse(
-    rankings: Sequence[Sequence[T]], *, k: int = DEFAULT_RRF_K
-) -> list[tuple[T, float]]:
+def rrf_fuse(rankings: Sequence[Sequence[T]], *, k: int = DEFAULT_RRF_K) -> list[tuple[T, float]]:
     """Reciprocal Rank Fusion。
 
     `rankings` 是若干条已排好序的列表（每条内部名次从 1 开始）。
@@ -192,9 +190,7 @@ class HybridRetriever:
             self._index.clear()
         return chunks
 
-    async def search(
-        self, query: str, *, top_k: int = 4, chapters_hint: str = ""
-    ) -> list[Snippet]:
+    async def search(self, query: str, *, top_k: int = 4, chapters_hint: str = "") -> list[Snippet]:
         if top_k <= 0 or self.corpus_size() == 0:
             return []
 
@@ -218,15 +214,15 @@ class HybridRetriever:
 
     # ------------------------------------------------------------ 向量路径
 
-    async def _vector_only(
-        self, query: str, *, top_k: int, chapters_hint: str
-    ) -> list[Snippet]:
+    async def _vector_only(self, query: str, *, top_k: int, chapters_hint: str) -> list[Snippet]:
         hits = await self._vector_search(query, top_k=top_k, chapters_hint=chapters_hint)
         if hits is None:
             # 纯向量档拿不到向量时退回关键词：有结果总比空手强，
             # 而且返回的仍是原文片段，溯源链没断
             return await self._bm25.search(query, top_k=top_k, chapters_hint=chapters_hint)
-        return [Snippet(doc_id=d, title=t, page=p, text=x, score=round(s, 4)) for d, p, x, t, s in hits]
+        return [
+            Snippet(doc_id=d, title=t, page=p, text=x, score=round(s, 4)) for d, p, x, t, s in hits
+        ]
 
     async def _vector_search(
         self, query: str, *, top_k: int, chapters_hint: str
@@ -309,16 +305,12 @@ class HybridRetriever:
         top_k: int,
     ) -> list[Snippet]:
         """RRF 融合两路结果，输出统一从 BM25 chunk 表取文本。"""
-        by_key: dict[str, Snippet] = {
-            chunk_key(s.doc_id, s.page, s.text): s for s in bm25_hits
-        }
+        by_key: dict[str, Snippet] = {chunk_key(s.doc_id, s.page, s.text): s for s in bm25_hits}
         for doc_id, page, text, title, _score in vector_hits:
             key = chunk_key(doc_id, page, text)
             if key not in by_key:
                 # 只在向量路命中的片段：用索引里的文本建一个，title 来自语料
-                by_key[key] = Snippet(
-                    doc_id=doc_id, title=title, page=page, text=text, score=0.0
-                )
+                by_key[key] = Snippet(doc_id=doc_id, title=title, page=page, text=text, score=0.0)
 
         bm25_ranking = [chunk_key(s.doc_id, s.page, s.text) for s in bm25_hits]
         vector_ranking = [chunk_key(d, p, t) for d, p, t, _title, _s in vector_hits]

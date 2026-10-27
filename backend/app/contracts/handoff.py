@@ -72,12 +72,18 @@ class Fact:
         page_raw = raw.get("page")
         page: int | None
         try:
-            page = int(page_raw) if page_raw not in (None, "") else None
-        except (TypeError, ValueError):
+            # 只接受 int/float/str 三种形状：模型确实会返回 12、"12"、12.0、true 这类脏值。
+            # 显式判类型而不是直接 int(page_raw)，是因为 `int(Any)` 在 mypy strict 下不合法，
+            # 而它恰恰会为了"看起来能跑"而放过所有非法形状。
+            if isinstance(page_raw, bool | type(None)):
+                page = None
+            elif isinstance(page_raw, int | float | str):
+                page = int(page_raw) if page_raw != "" else None
+            else:
+                page = None
+        except ValueError:
             page = None
-        return cls(
-            claim=claim, source_id=source_id, page=page, quote=_clip_quote(quote)
-        )
+        return cls(claim=claim, source_id=source_id, page=page, quote=_clip_quote(quote))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -100,9 +106,7 @@ class ResearchPacket:
     dropped_facts: int = 0
 
     @classmethod
-    def from_dict(
-        cls, raw: Mapping[str, Any], *, chapter: int | None = None
-    ) -> ResearchPacket:
+    def from_dict(cls, raw: Mapping[str, Any], *, chapter: int | None = None) -> ResearchPacket:
         ch = int(raw.get("chapter", chapter or 0))
         summary = _compress_summary(str(raw.get("summary", "")))
         facts_raw = raw.get("key_facts") or []
@@ -164,9 +168,7 @@ class ChapterDraft:
     insufficient_evidence: bool = False
 
     @classmethod
-    def from_dict(
-        cls, raw: Mapping[str, Any], *, chapter: int | None = None
-    ) -> ChapterDraft:
+    def from_dict(cls, raw: Mapping[str, Any], *, chapter: int | None = None) -> ChapterDraft:
         ch = int(raw.get("chapter", chapter or 0))
         markdown = str(raw.get("markdown", "")).strip()
         if not markdown:
@@ -284,17 +286,13 @@ class ReviewVerdict:
         return FixTarget.WRITE.value
 
     @classmethod
-    def from_dict(
-        cls, raw: Mapping[str, Any], *, chapter: int | None = None
-    ) -> ReviewVerdict:
+    def from_dict(cls, raw: Mapping[str, Any], *, chapter: int | None = None) -> ReviewVerdict:
         ch = int(raw.get("chapter", chapter or 0))
         verdict = str(raw.get("verdict", "")).strip().lower()
         if verdict not in {"pass", "revise"}:
             raise HandoffError(f"verdict 取值非法: {verdict!r}（只接受 pass/revise）")
         defects = tuple(
-            Defect.from_dict(d)
-            for d in (raw.get("defects") or [])
-            if isinstance(d, Mapping)
+            Defect.from_dict(d) for d in (raw.get("defects") or []) if isinstance(d, Mapping)
         )
         if verdict == "revise" and not defects:
             # 只说"不行"不说哪里不行，下游无法修 —— 视为模型输出不合格

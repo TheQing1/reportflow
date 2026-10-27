@@ -332,9 +332,7 @@ def _parse_so360_html(html: str, *, limit: int) -> list[tuple[str, str, str]]:
     """
     out: list[tuple[str, str, str]] = []
     # 逐个 <li class="res-list"> 块解析，避免跨条目误匹配
-    for block in re.finditer(
-        r'(?s)<li[^>]+class="[^"]*res-list[^"]*"[^>]*>(.*?)</li>', html
-    ):
+    for block in re.finditer(r'(?s)<li[^>]+class="[^"]*res-list[^"]*"[^>]*>(.*?)</li>', html):
         seg = block.group(1)
         title_m = re.search(
             r'<h3[^>]*class="[^"]*res-title[^"]*"[^>]*>.*?<a([^>]*)>(.*?)</a>',
@@ -419,7 +417,9 @@ def _unwrap_ddg_redirect(href: str) -> str:
     """DuckDuckGo 的链接常被包成 //duckduckgo.com/l/?uddg=<真实地址>。"""
 
     if "uddg=" not in href:
-        return href if href.startswith("http") else f"https:{href}" if href.startswith("//") else href
+        return (
+            href if href.startswith("http") else f"https:{href}" if href.startswith("//") else href
+        )
     try:
         qs = parse_qs(urlparse(href).query)
         real = (qs.get("uddg") or [""])[0]

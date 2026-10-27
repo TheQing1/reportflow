@@ -152,23 +152,17 @@ class CacheKeyToolsTest(unittest.TestCase):
         """工具声明顺序不该影响语义，也不该影响键（否则抖动一下就 miss）。"""
         a = LLMToolSpec(name="a", description="x")
         b = LLMToolSpec(name="b", description="y")
-        self.assertEqual(
-            prompt_key(self._req(tools=(a, b))), prompt_key(self._req(tools=(b, a)))
-        )
+        self.assertEqual(prompt_key(self._req(tools=(a, b))), prompt_key(self._req(tools=(b, a))))
 
     def test_tool_result_message_changes_key(self) -> None:
         """工具返回不同内容 → 键必须不同，否则会回放出错误的工具结果。"""
         from app.contracts.llm import LLMMessage
 
         r1 = self._req(
-            messages=[
-                LLMMessage(role="tool", content="结果A", tool_call_id="c1", name="kb_search")
-            ]
+            messages=[LLMMessage(role="tool", content="结果A", tool_call_id="c1", name="kb_search")]
         )
         r2 = self._req(
-            messages=[
-                LLMMessage(role="tool", content="结果B", tool_call_id="c1", name="kb_search")
-            ]
+            messages=[LLMMessage(role="tool", content="结果B", tool_call_id="c1", name="kb_search")]
         )
         self.assertNotEqual(prompt_key(r1), prompt_key(r2))
 
@@ -200,7 +194,11 @@ class ToolLoopTest(unittest.TestCase):
         tool = _EchoTool()
         llm = _ScriptedToolLLM(
             [
-                _resp(tool_calls=(LLMToolCall(id="c1", name="kb_search", arguments='{"query":"储能"}'),)),
+                _resp(
+                    tool_calls=(
+                        LLMToolCall(id="c1", name="kb_search", arguments='{"query":"储能"}'),
+                    )
+                ),
                 _resp('{"chapter":1,"key_facts":[]}'),
             ]
         )
@@ -325,9 +323,7 @@ class ToolLoopTest(unittest.TestCase):
         self.assertEqual(data["chapter"], 1)
         # 工具调用次数不能超过上限
         self.assertLessEqual(len(tool.calls), JsonAgent.MAX_TOOL_ROUNDS)
-        self.assertEqual(
-            len(tool.calls), JsonAgent.MAX_TOOL_ROUNDS, "上限内应尽量用满，但绝不超"
-        )
+        self.assertEqual(len(tool.calls), JsonAgent.MAX_TOOL_ROUNDS, "上限内应尽量用满，但绝不超")
 
     def test_tool_items_are_collected_for_evidence(self) -> None:
         """工具返回的片段必须被登记，否则溯源校验会把合法引用判成编造。"""

@@ -159,9 +159,7 @@ class ResearcherAgent(JsonAgent):
         #
         # 工具模式下 +1000：工具结果会占掉一部分上下文预算。
         effective_tokens = 4000 if tools is not None else 3000
-        super().__init__(
-            llm, temperature=0.1, max_tokens=effective_tokens, tools=tools
-        )
+        super().__init__(llm, temperature=0.1, max_tokens=effective_tokens, tools=tools)
         self._retriever = retriever
         self._per_query = snippets_per_query
         #: 有文档预算时的召回池大小。必须显著大于 per_query，重排才有腾挪空间。

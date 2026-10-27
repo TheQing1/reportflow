@@ -42,6 +42,19 @@ jobs:
         working-directory: backend
         run: ruff check .
 
+      # 格式也进 CI：Makefile 的 `fmt` 与 pre-commit 都在格式化，
+      # 但如果 CI 只跑 `ruff check`，格式化就永远是"靠自觉"。
+      - name: 格式检查 (ruff format)
+        working-directory: backend
+        run: ruff format --check .
+
+      # mypy 只检查声明了 strict 的两层（contracts / core）。
+      # 不全仓开 strict 是刻意的：其余层与第三方库的 Any 交互太多，
+      # 强开只会产生大量 noise，反而没人看。这两层是域模型与配置，值得严。
+      - name: 类型检查 (mypy strict 层)
+        working-directory: backend
+        run: mypy app/contracts app/core
+
       - name: 测试 + 覆盖率
         working-directory: backend
         # 全部测试用 fake/scripted LLM，不联网、不需要 API Key

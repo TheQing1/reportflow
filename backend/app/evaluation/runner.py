@@ -161,12 +161,21 @@ class EvalRunner:
                         )
                         self._log.info(
                             "[%s] %d/%d %-18s r%d 已完成，读取缓存",
-                            arm.value, done, total, case.id, rep,
+                            arm.value,
+                            done,
+                            total,
+                            case.id,
+                            rep,
                         )
                     else:
                         self._log.info(
                             "[%s] %d/%d %-18s r%d | %s",
-                            arm.value, done, total, case.id, rep, case.topic,
+                            arm.value,
+                            done,
+                            total,
+                            case.id,
+                            rep,
+                            case.topic,
                         )
                         metric = await self._run_case(arm, case, rep)
                         cache.write_text(
@@ -202,7 +211,9 @@ class EvalRunner:
 
     # ---------------------------------------------------------------- A 组
 
-    async def _run_single_shot(self, case: TopicCase) -> tuple[CaseMetrics, ReportArtifact, set[str]]:
+    async def _run_single_shot(
+        self, case: TopicCase
+    ) -> tuple[CaseMetrics, ReportArtifact, set[str]]:
         retriever = self.rt.retriever
         if retriever is None or self.rt.gateway is None:
             raise RuntimeError("A 组需要 retriever 与 gateway（--profile real）")
@@ -356,7 +367,9 @@ class EvalRunner:
                 if baseline is other:
                     continue
                 comparisons.append(
-                    paired(samples[baseline], samples[other], label=f"{baseline.value} → {other.value}")
+                    paired(
+                        samples[baseline], samples[other], label=f"{baseline.value} → {other.value}"
+                    )
                 )
         semantic_comparisons = []
         for baseline in arms:
@@ -526,8 +539,7 @@ def render_markdown(
         ]
         for c in comparisons:
             lines.append(
-                f"| {c.label} | {c.describe()} | {c.n} | "
-                f"{'✅ 是' if c.significant else '❌ 否'} |"
+                f"| {c.label} | {c.describe()} | {c.n} | {'✅ 是' if c.significant else '❌ 否'} |"
             )
 
     if semantic_comparisons:
@@ -542,8 +554,7 @@ def render_markdown(
         ]
         for c in semantic_comparisons:
             lines.append(
-                f"| {c.label} | {c.describe()} | {c.n} | "
-                f"{'✅ 是' if c.significant else '❌ 否'} |"
+                f"| {c.label} | {c.describe()} | {c.n} | {'✅ 是' if c.significant else '❌ 否'} |"
             )
 
     lines += ["", "## 分主题明细", ""]
@@ -585,7 +596,12 @@ def render_markdown(
         lines += missing[:12] or ["- （无）"]
         lines.append("")
 
-    lines += ["## 语义不支持样例", "", "每条都是「正文这么写了，但原文不支持」。这是最该人工看的部分。", ""]
+    lines += [
+        "## 语义不支持样例",
+        "",
+        "每条都是「正文这么写了，但原文不支持」。这是最该人工看的部分。",
+        "",
+    ]
     for arm, metrics in results.items():
         bad: list[str] = []
         for m in metrics:

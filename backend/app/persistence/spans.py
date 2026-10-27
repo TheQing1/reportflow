@@ -128,9 +128,7 @@ class SpanQuery:
                     SpanRow.node_id,
                     func.count(SpanRow.id),
                     func.coalesce(func.sum(SpanRow.cost), 0.0),
-                    func.coalesce(
-                        func.sum(SpanRow.prompt_tokens + SpanRow.completion_tokens), 0
-                    ),
+                    func.coalesce(func.sum(SpanRow.prompt_tokens + SpanRow.completion_tokens), 0),
                 )
                 .where(SpanRow.task_id == task_id)
                 .group_by(SpanRow.node_id)

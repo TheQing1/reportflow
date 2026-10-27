@@ -57,9 +57,7 @@ class ReviewerAgent(JsonAgent):
 
     async def execute(self, ctx: AgentContext) -> dict[str, Any]:
         chapter = int(ctx.node.payload.get("chapter", 0))
-        draft = ChapterDraft.from_dict(
-            ctx.upstream_of(f"write_ch{chapter}"), chapter=chapter
-        )
+        draft = ChapterDraft.from_dict(ctx.upstream_of(f"write_ch{chapter}"), chapter=chapter)
 
         program_defects = self._program_check(draft)
         precision = self._citation_precision(draft)
@@ -169,9 +167,7 @@ class ReviewerAgent(JsonAgent):
             quote_digits = _NON_DIGIT.sub("", quotes)
             numbers = {n for n, _unit in _NUM_WITH_UNIT.findall(sentence)}
             numbers |= set(_NUM_DECIMAL.findall(sentence))
-            missing = sorted(
-                n for n in numbers if _NON_DIGIT.sub("", n) not in quote_digits
-            )
+            missing = sorted(n for n in numbers if _NON_DIGIT.sub("", n) not in quote_digits)
             if missing:
                 defects.append(
                     Defect(

@@ -35,9 +35,7 @@ DEFAULT_LATENCY: dict[NodeType, float] = {
 @dataclass(frozen=True)
 class MockAgentConfig:
     #: 每种节点类型的模拟耗时（秒）
-    latency_s: Mapping[NodeType, float] = field(
-        default_factory=lambda: dict(DEFAULT_LATENCY)
-    )
+    latency_s: Mapping[NodeType, float] = field(default_factory=lambda: dict(DEFAULT_LATENCY))
     #: 永远失败的节点 id 集合（重试也会失败，用于触发 BLOCKED 传播）
     fail_nodes: frozenset[str] = frozenset()
     #: 随机抖动上限，让并行节点的完成时刻错开，日志里看得更清楚
@@ -63,9 +61,7 @@ class MockAgent:
         if node.id in self.config.fail_nodes:
             # 先睡一下再失败：让日志里的失败时机看起来像真实超时/报错
             await asyncio.sleep(self.config.latency_s.get(self.node_type, 0.1) / 2)
-            raise MockInjectedFailure(
-                f"injected failure on {node.id} (attempt={ctx.attempt})"
-            )
+            raise MockInjectedFailure(f"injected failure on {node.id} (attempt={ctx.attempt})")
 
         base = self.config.latency_s.get(self.node_type, 0.2)
         rng = random.Random(f"{self.config.seed}:{node.id}:{ctx.attempt}")
@@ -88,8 +84,7 @@ class MockAgent:
             "mock": True,
             "topic": topic,
             "outline": [
-                {"chapter": i, "title": f"{topic} · 第 {i} 部分"}
-                for i in range(1, sections + 1)
+                {"chapter": i, "title": f"{topic} · 第 {i} 部分"} for i in range(1, sections + 1)
             ],
         }
 
@@ -121,7 +116,8 @@ class MockAgent:
             "markdown": (
                 f"## {ch}. [MOCK] 第 {ch} 章正文\n\n"
                 + "\n".join(
-                    f"- {f['claim']} [^{f['source_id']}]" for f in facts  # type: ignore[index]
+                    f"- {f['claim']} [^{f['source_id']}]"
+                    for f in facts  # type: ignore[index]
                 )
             ),
             "citation_map": {f["source_id"]: f["page"] for f in facts},  # type: ignore[index]

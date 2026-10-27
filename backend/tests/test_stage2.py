@@ -52,15 +52,15 @@ def _node(node_id: str, node_type: NodeType, **payload: Any) -> NodeSpec:
     return NodeSpec(id=node_id, type=node_type, payload=payload)
 
 
-def _ctx(node: NodeSpec, upstream: dict[str, Any] | None = None, hint: str | None = None) -> AgentContext:
+def _ctx(
+    node: NodeSpec, upstream: dict[str, Any] | None = None, hint: str | None = None
+) -> AgentContext:
     return AgentContext(task_id="t", node=node, attempt=1, upstream=upstream or {}, hint=hint)
 
 
 class TestHandoffProtocol(unittest.TestCase):
     def test_quote_is_clipped_not_truncated_blindly(self) -> None:
-        fact = Fact.from_dict(
-            {"claim": "c", "source_id": "d", "page": 1, "quote": "字" * 500}
-        )
+        fact = Fact.from_dict({"claim": "c", "source_id": "d", "page": 1, "quote": "字" * 500})
         self.assertLessEqual(len(fact.quote), 300)
         self.assertIn("……", fact.quote)
 
@@ -68,10 +68,33 @@ class TestHandoffProtocol(unittest.TestCase):
         with self.assertRaises(HandoffError):
             Fact.from_dict({"claim": "c", "source_id": "d"})
 
+    def test_page_accepts_only_numeric_shapes(self) -> None:
+        """page 是模型最容易给脏值的字段（"P.12"、12.0、true、""）。
+
+        这里断言的是**除数字以外的形状一律降级为 None**，而不是让异常冒到
+        HandoffError —— page 只影响展示，不值得让整条 fact 作废。
+        """
+        base = {"claim": "c", "source_id": "d", "quote": "q"}
+        cases: list[tuple[object, int | None]] = [
+            (12, 12),
+            ("12", 12),
+            (12.0, 12),
+            # "12.5" → None：不截断成 12。页码是溯源证据的一部分，静默改数
+            # 比丢失页码更糟——那会让读者以为引用出自第 12 页。
+            ("12.5", None),
+            ("", None),
+            (None, None),
+            (True, None),  # bool 是 int 的子类，必须先拦，否则 True 会变成第 1 页
+            ("P.12", None),  # 带前缀的脏值：ValueError → None
+            ({"n": 1}, None),
+        ]
+        for raw_page, expected in cases:
+            with self.subTest(page=raw_page):
+                fact = Fact.from_dict({**base, "page": raw_page})
+                self.assertEqual(fact.page, expected)
+
     def test_summary_is_compressed_on_sentence_boundary(self) -> None:
-        packet = ResearchPacket.from_dict(
-            {"chapter": 1, "summary": ("这是一句话。" * 80) }
-        )
+        packet = ResearchPacket.from_dict({"chapter": 1, "summary": ("这是一句话。" * 80)})
         self.assertLessEqual(len(packet.summary), 200)
         self.assertNotIn("\n", packet.summary)
 
@@ -95,10 +118,10 @@ class TestHandoffProtocol(unittest.TestCase):
 
 class TestJsonParsing(unittest.TestCase):
     def test_fenced(self) -> None:
-        self.assertEqual(parse_json_object("```json\n{\"a\":1}\n```"), {"a": 1})
+        self.assertEqual(parse_json_object('```json\n{"a":1}\n```'), {"a": 1})
 
     def test_wrapped_in_prose(self) -> None:
-        self.assertEqual(parse_json_object("好的，结果如下：{\"a\":2} 完毕"), {"a": 2})
+        self.assertEqual(parse_json_object('好的，结果如下：{"a":2} 完毕'), {"a": 2})
 
     def test_garbage_raises(self) -> None:
         with self.assertRaises(LLMBadResponse):
@@ -108,11 +131,17 @@ class TestJsonParsing(unittest.TestCase):
 class TestPlannerAgent(unittest.TestCase):
     def test_rejects_wrong_chapter_count(self) -> None:
         llm = ScriptedLLM(
-            {"planner": json_handler({"chapters": [{"chapter": 1, "title": "a", "queries": ["q"]}]})}
+            {
+                "planner": json_handler(
+                    {"chapters": [{"chapter": 1, "title": "a", "queries": ["q"]}]}
+                )
+            }
         )
         agent = PlannerAgent(llm)
         with self.assertRaises(HandoffError):
-            asyncio.run(agent.execute(_ctx(_node("planner", NodeType.PLANNER, topic="x", sections=3))))
+            asyncio.run(
+                agent.execute(_ctx(_node("planner", NodeType.PLANNER, topic="x", sections=3)))
+            )
 
     def test_strips_question_marks_from_queries(self) -> None:
         llm = ScriptedLLM(
@@ -123,7 +152,9 @@ class TestPlannerAgent(unittest.TestCase):
             }
         )
         out = asyncio.run(
-            PlannerAgent(llm).execute(_ctx(_node("planner", NodeType.PLANNER, topic="x", sections=1)))
+            PlannerAgent(llm).execute(
+                _ctx(_node("planner", NodeType.PLANNER, topic="x", sections=1))
+            )
         )
         self.assertEqual(out["outline"][0]["queries"], ["储能增速"])
 
@@ -149,7 +180,9 @@ class TestResearcherAgent(unittest.TestCase):
             ],
             "open_questions": [],
         }
-        agent = ResearcherAgent(ScriptedLLM({"research_ch1": json_handler(payload)}), self.retriever)
+        agent = ResearcherAgent(
+            ScriptedLLM({"research_ch1": json_handler(payload)}), self.retriever
+        )
         out = asyncio.run(
             agent.execute(
                 _ctx(
@@ -166,11 +199,11 @@ class TestResearcherAgent(unittest.TestCase):
         payload = {
             "chapter": 1,
             "summary": "x",
-            "key_facts": [
-                {"claim": "c", "source_id": "doc_99", "page": 1, "quote": QUOTE}
-            ],
+            "key_facts": [{"claim": "c", "source_id": "doc_99", "page": 1, "quote": QUOTE}],
         }
-        agent = ResearcherAgent(ScriptedLLM({"research_ch1": json_handler(payload)}), self.retriever)
+        agent = ResearcherAgent(
+            ScriptedLLM({"research_ch1": json_handler(payload)}), self.retriever
+        )
         out = asyncio.run(
             agent.execute(
                 _ctx(
@@ -186,9 +219,7 @@ class TestResearcherAgent(unittest.TestCase):
         agent = ResearcherAgent(
             ScriptedLLM({"research_ch1": "never used"}), LocalCorpusRetriever([])
         )
-        out = asyncio.run(
-            agent.execute(_ctx(_node("research_ch1", NodeType.RESEARCH, chapter=1)))
-        )
+        out = asyncio.run(agent.execute(_ctx(_node("research_ch1", NodeType.RESEARCH, chapter=1))))
         self.assertEqual(out["key_facts"], [])
         self.assertTrue(out["open_questions"])
 
@@ -241,8 +272,18 @@ class TestWriterAgent(unittest.TestCase):
             "chapter": 1,
             "summary": "s",
             "key_facts": [
-                {"claim": "补贴覆盖12个省份", "source_id": "doc_01", "page": 1, "quote": "补贴覆盖12个省份"},
-                {"claim": "最高补贴300元/千瓦", "source_id": "doc_01", "page": 2, "quote": "最高补贴300元/千瓦"},
+                {
+                    "claim": "补贴覆盖12个省份",
+                    "source_id": "doc_01",
+                    "page": 1,
+                    "quote": "补贴覆盖12个省份",
+                },
+                {
+                    "claim": "最高补贴300元/千瓦",
+                    "source_id": "doc_01",
+                    "page": 2,
+                    "quote": "最高补贴300元/千瓦",
+                },
             ],
             "open_questions": [],
         }
@@ -258,12 +299,15 @@ class TestWriterAgent(unittest.TestCase):
         )
         out = asyncio.run(
             WriterAgent(llm).execute(
-                _ctx(_node("write_ch1", NodeType.WRITE, chapter=1), upstream={"research_ch1": packet})
+                _ctx(
+                    _node("write_ch1", NodeType.WRITE, chapter=1), upstream={"research_ch1": packet}
+                )
             )
         )
         self.assertEqual(len(out["used_facts"]), 2, "同源两条 fact 都要保留")
-        self.assertEqual({f["claim"] for f in out["used_facts"]},
-                         {"补贴覆盖12个省份", "最高补贴300元/千瓦"})
+        self.assertEqual(
+            {f["claim"] for f in out["used_facts"]}, {"补贴覆盖12个省份", "最高补贴300元/千瓦"}
+        )
         self.assertEqual(out["citation_map"], {"doc_01": 1})
 
     def test_empty_packet_skips_llm(self) -> None:
@@ -272,7 +316,9 @@ class TestWriterAgent(unittest.TestCase):
             WriterAgent(llm).execute(
                 _ctx(
                     _node("write_ch1", NodeType.WRITE, chapter=1),
-                    upstream={"research_ch1": {"chapter": 1, "key_facts": [], "open_questions": ["缺"]}},
+                    upstream={
+                        "research_ch1": {"chapter": 1, "key_facts": [], "open_questions": ["缺"]}
+                    },
                 )
             )
         )
@@ -287,9 +333,7 @@ class TestReviewerAgent(unittest.TestCase):
             "chapter": 1,
             "markdown": f"## 一\n\n{claim}[^doc_01]",
             "citation_map": {"doc_01": 23},
-            "used_facts": [
-                {"claim": claim, "source_id": "doc_01", "page": 23, "quote": QUOTE}
-            ],
+            "used_facts": [{"claim": claim, "source_id": "doc_01", "page": 23, "quote": QUOTE}],
             **kwargs,
         }
 
@@ -310,7 +354,9 @@ class TestReviewerAgent(unittest.TestCase):
 
     def test_chapter_ordinal_not_treated_as_data(self) -> None:
         """「第 3 章」里的 3 不是数据，不能触发数字不一致。"""
-        llm = ScriptedLLM({"review_ch1": json_handler({"chapter": 1, "verdict": "pass", "defects": []})})
+        llm = ScriptedLLM(
+            {"review_ch1": json_handler({"chapter": 1, "verdict": "pass", "defects": []})}
+        )
         out = asyncio.run(
             ReviewerAgent(llm).execute(
                 _ctx(
@@ -367,9 +413,7 @@ class ScriptedTransport:
         item = queue.pop(0) if queue else f"ok:{req.model}"
         if isinstance(item, BaseException):
             raise item
-        return LLMResponse(
-            text=item, model=req.model, usage=LLMUsage(10, 5), latency_ms=7
-        )
+        return LLMResponse(text=item, model=req.model, usage=LLMUsage(10, 5), latency_ms=7)
 
 
 def _req(tag: str = "n1") -> LLMRequest:
@@ -410,9 +454,7 @@ class TestGateway(unittest.TestCase):
         self.assertTrue(last.degraded)
 
     def test_permanent_error_also_tries_fallback(self) -> None:
-        gw, _ = self._gateway(
-            {"primary": [LLMPermanent("401")], "fallback": ["ok"]}, max_retries=2
-        )
+        gw, _ = self._gateway({"primary": [LLMPermanent("401")], "fallback": ["ok"]}, max_retries=2)
         resp = asyncio.run(gw.complete(_req()))
         self.assertTrue(resp.degraded)
 
@@ -449,8 +491,7 @@ class FixableAgents:
         def planner(ctx: AgentContext) -> dict[str, Any]:
             return {
                 "outline": [
-                    {"chapter": i, "title": f"第{i}章", "queries": [f"q{i}"]}
-                    for i in (1, 2)
+                    {"chapter": i, "title": f"第{i}章", "queries": [f"q{i}"]} for i in (1, 2)
                 ]
             }
 

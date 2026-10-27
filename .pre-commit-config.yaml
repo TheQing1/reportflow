@@ -11,7 +11,10 @@ default_language_version:
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    # 与 backend/requirements-dev.txt 装到的 ruff 版本保持一致。
+    # 差距过大时 pre-commit 放过的代码会在 `ruff format --check` 下失败，
+    # 因为格式化规则随版本演进 —— 于是出现"本地绿的、CI 红的"。
+    rev: v0.17.2
     hooks:
       - id: ruff
         args: [--fix]        # 能自动修的先修（未使用导入等）
@@ -29,3 +32,19 @@ repos:
         args: [--maxkb=2048]   # 语料都是文本，2MB 已经异常
       # 密钥兜底：阻止 .env 被误提交
       - id: detect-private-key
+
+  # mypy 只在本地跑（CI 里由 workflow 覆盖），且只查声明了 strict 的两层。
+  # 用途不同：ruff 管格式、mypy 管类型，后者慢一些但能在提交前拦住
+  # "参数名改了但调用方没改"这类 ruff 看不见的错误。
+  - repo: local
+    hooks:
+      - id: mypy-strict-layers
+        name: mypy (contracts + core, strict)
+        entry: python -m mypy
+        language: system
+        files: ^backend/(app/contracts|app/core)/.*\.py$
+        pass_filenames: false
+        args: [app/contracts, app/core]
+        # 必须在 backend/ 下执行才能读到 pyproject.toml 的 mypy 配置
+        require_serial: true
+        stages: [pre-commit]

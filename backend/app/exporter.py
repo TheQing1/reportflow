@@ -45,9 +45,7 @@ def build_report(task: TaskState, nodes: Iterable[NodeState]) -> BuiltReport:
             src = str(fact.get("source_id"))
             page = f" P.{fact['page']}" if fact.get("page") else ""
             # 同一来源被多章引用时保留首次出现的页码，避免后写的覆盖前面的
-            refs.setdefault(
-                src, f"[^{src}]: {src}{page} — {str(fact.get('quote', ''))[:80]}"
-            )
+            refs.setdefault(src, f"[^{src}]: {src}{page} — {str(fact.get('quote', ''))[:80]}")
 
     body = [
         f"# {task.topic}",

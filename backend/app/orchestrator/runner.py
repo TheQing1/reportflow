@@ -190,9 +190,7 @@ class TaskRunner:
             raise LookupError(f"任务不存在: {task_id}")
 
         started = time.monotonic()
-        has_failed = any(
-            n.status in FAILURE_STATES for n in self.store.list_nodes(task_id)
-        )
+        has_failed = any(n.status in FAILURE_STATES for n in self.store.list_nodes(task_id))
         if task.status is TaskStatus.DONE and not (reset_failed and has_failed):
             # 只有 DONE 才短路：PARTIAL 任务重跑一遍是廉价的（所有节点都已终态，
             # 逐个被 start_node 挡掉），但能重新汇总出正确的终态——
@@ -204,9 +202,7 @@ class TaskRunner:
         # 上个进程留下的 RUNNING 视为孤儿：进程已死，重置为 PENDING 重跑本次尝试
         recovered = self.store.claim_orphans(task_id=task_id, owner=owner)
         if recovered:
-            self._log.warning(
-                "恢复 %d 个孤儿节点（原进程已退出，重置为 PENDING）", recovered
-            )
+            self._log.warning("恢复 %d 个孤儿节点（原进程已退出，重置为 PENDING）", recovered)
 
         if reset_failed:
             n = self.store.reset_failed(task_id=task_id)
@@ -388,9 +384,7 @@ class TaskRunner:
 
     # ---------------------------------------------------------------- 终态
 
-    def _final_task_status(
-        self, nodes: list[NodeState], counts: Counter[NodeStatus]
-    ) -> TaskStatus:
+    def _final_task_status(self, nodes: list[NodeState], counts: Counter[NodeStatus]) -> TaskStatus:
         total = len(nodes)
         if total == 0:
             return TaskStatus.FAILED

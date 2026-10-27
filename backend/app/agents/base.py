@@ -116,9 +116,7 @@ class JsonAgent:
     ) -> tuple[dict[str, Any], LLMResponse]:
         """要一份 JSON。启用工具时先跑完工具循环，再要 JSON。"""
         if self._tools is not None:
-            return await self._ask_json_with_tools(
-                ctx_tag, system, user, timeout_s=timeout_s
-            )
+            return await self._ask_json_with_tools(ctx_tag, system, user, timeout_s=timeout_s)
         return await self._ask_json_plain(ctx_tag, system, user, timeout_s=timeout_s)
 
     async def _ask_json_plain(

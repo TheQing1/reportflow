@@ -98,6 +98,25 @@
   Bing 返回 JS 渲染的空壳页（`h2 > a` 抓到的标题与查询无关），360 能连通且返回真实结果。
   保留三档可切换（`so360` / `duckduckgo` / `bing`），说明搜索源可达性随环境而变，
   写死一家等于把工具可移植性押在运气上
+- **`pyproject.toml` 漏声明 `app.tools` 子包**：本地 `cwd` 在 `sys.path` 上永远复现不了，
+  只有 `pip install .` 到干净环境（Docker 镜像、被别人安装）才 `ModuleNotFoundError`。
+  补声明，并新增 `TestPackaging` 双向校验（声明↔磁盘），已做变异测试确认会红
+- **`mypy` 声明了 `strict` 覆盖 `contracts` / `core`，但从没在 CI 里跑过**：实际有 8 个错误。
+  `pyproject.toml` 里那段 override 从阶段一就写在那儿，始终没被执行过——
+  "配置即文档"的典型陷阱：读者会把它当成事实，而事实只有执行了才算。
+  修完并加进 CI（`mypy app/contracts app/core`）与 pre-commit
+- **`Fact.from_dict` 的 `page` 解析会把 `True` 静默变成第 1 页**：`bool` 是 `int` 的子类。
+  页码是溯源证据的一部分，静默改数比丢页码更糟。改为显式判类型，
+  `bool` / `dict` / `"P.12"` / `"12.5"` 一律置 `None`，9 个 subTest 覆盖
+- **`_UtcFormatter.converter = time.gmtime` 依赖基类实现细节**：签名对不上是小事，
+  上游改成不传参就是运行期 `TypeError`。改为显式方法，日志输出逐字不变（已比对）
+- **`ruff format` 与 pre-commit 互相矛盾**：CI/pre-commit 只跑 `ruff check`（lint），
+  从没跑过 `ruff format`（排版），代码长期在两种状态间漂移；且 pre-commit 锁的
+  `v0.8.4` 与 dev 依赖装到的 `0.17.2` 不是同一版本。现全量格式化一次
+  （49 文件，纯排版，**所有 LLM prompt 字面量逐字未变**，评测基线不受影响），
+  CI 加 `ruff format --check`，pre-commit 升到 `v0.17.2`
+- **`STAGE5_ACCEPTANCE.md` 出现重复的 `## 6.5` / `## 6.6` 编号**：Markdown 不校验编号，
+  肉眼扫目录才会发现。重排为 6.5→6.8 连续并同步全部 `§6.x` 交叉引用
 
 ### Known issues
 

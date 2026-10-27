@@ -40,9 +40,7 @@ class WriterAgent(JsonAgent):
 
     async def execute(self, ctx: AgentContext) -> dict[str, Any]:
         chapter = int(ctx.node.payload.get("chapter", 0))
-        packet = ResearchPacket.from_dict(
-            ctx.upstream_of(f"research_ch{chapter}"), chapter=chapter
-        )
+        packet = ResearchPacket.from_dict(ctx.upstream_of(f"research_ch{chapter}"), chapter=chapter)
 
         if packet.is_empty:
             return self._insufficient(chapter, packet)
@@ -56,9 +54,7 @@ class WriterAgent(JsonAgent):
         draft = ChapterDraft.from_dict(data, chapter=chapter)
         draft, invalid = self._enforce_citations(draft, packet)
         if invalid:
-            self._log.warning(
-                "[%s] 剥掉 %d 个无法映射到素材的角标", ctx.node.id, invalid
-            )
+            self._log.warning("[%s] 剥掉 %d 个无法映射到素材的角标", ctx.node.id, invalid)
         self._log.info(
             "[%s] 正文完成：%d 字，引用 %d 条 fact",
             ctx.node.id,
@@ -115,17 +111,13 @@ class WriterAgent(JsonAgent):
 
         cleaned = _CITE.sub(_strip, markdown)
         cited = set(_CITE.findall(cleaned))
-        used = tuple(
-            fact for src in sorted(cited) if src in allowed for fact in allowed[src]
-        )
+        used = tuple(fact for src in sorted(cited) if src in allowed for fact in allowed[src])
 
         if not cleaned.lstrip().startswith("#"):
             cleaned = f"## 第 {draft.chapter} 章\n\n{cleaned}"
 
         # 页码以素材为准，不采信模型输出；同源多条取首条的页码
-        citation_map = {
-            src: allowed[src][0].page for src in sorted(cited) if src in allowed
-        }
+        citation_map = {src: allowed[src][0].page for src in sorted(cited) if src in allowed}
         return (
             ChapterDraft(
                 chapter=draft.chapter,

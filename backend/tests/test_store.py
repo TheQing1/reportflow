@@ -21,42 +21,30 @@ class TestSqlTaskStore(unittest.TestCase):
         create_schema(engine)
         self.store = SqlTaskStore(build_session_factory(engine))
         self.graph = build_report_graph(topic="储能", sections=3)
-        self.store.create_task(
-            task_id="t1", topic="储能", sections=3, graph=self.graph
-        )
+        self.store.create_task(task_id="t1", topic="储能", sections=3, graph=self.graph)
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_duplicate_create_rejected(self) -> None:
         with self.assertRaises(TaskExistsError):
-            self.store.create_task(
-                task_id="t1", topic="储能", sections=3, graph=self.graph
-            )
+            self.store.create_task(task_id="t1", topic="储能", sections=3, graph=self.graph)
 
     def test_load_graph_roundtrip(self) -> None:
         loaded = self.store.load_graph("t1")
         self.assertIsNotNone(loaded)
         assert loaded is not None
-        self.assertEqual(
-            {n.id: n.deps for n in loaded}, {n.id: n.deps for n in self.graph}
-        )
+        self.assertEqual({n.id: n.deps for n in loaded}, {n.id: n.deps for n in self.graph})
         self.assertEqual(loaded.get("write_ch2").deps, ("research_ch2", "review_ch1"))
 
     def test_start_node_is_atomic(self) -> None:
-        ok1 = self.store.start_node(
-            task_id="t1", node_id="planner", attempt=1, owner="a"
-        )
-        ok2 = self.store.start_node(
-            task_id="t1", node_id="planner", attempt=1, owner="b"
-        )
+        ok1 = self.store.start_node(task_id="t1", node_id="planner", attempt=1, owner="a")
+        ok2 = self.store.start_node(task_id="t1", node_id="planner", attempt=1, owner="b")
         self.assertTrue(ok1)
         self.assertFalse(ok2, "同一 (node, attempt) 只能被抢一次")
 
     def test_finish_requires_running(self) -> None:
-        ok = self.store.finish_node(
-            task_id="t1", node_id="planner", attempt=1, output={"a": 1}
-        )
+        ok = self.store.finish_node(task_id="t1", node_id="planner", attempt=1, output={"a": 1})
         self.assertFalse(ok, "未抢占的节点不允许直接置 DONE")
 
     def test_fail_then_retry_increments_attempt(self) -> None:
@@ -85,12 +73,8 @@ class TestSqlTaskStore(unittest.TestCase):
 
     def test_block_does_not_touch_done(self) -> None:
         self.store.start_node(task_id="t1", node_id="planner", attempt=1, owner="a")
-        self.store.finish_node(
-            task_id="t1", node_id="planner", attempt=1, output={"ok": True}
-        )
-        self.assertFalse(
-            self.store.block_node(task_id="t1", node_id="planner", reason="x")
-        )
+        self.store.finish_node(task_id="t1", node_id="planner", attempt=1, output={"ok": True})
+        self.assertFalse(self.store.block_node(task_id="t1", node_id="planner", reason="x"))
         node = {n.node_id: n for n in self.store.list_nodes("t1")}["planner"]
         self.assertIs(node.status.value, "DONE")
 
