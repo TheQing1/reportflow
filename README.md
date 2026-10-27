@@ -75,8 +75,8 @@ Researcher 产出的每条素材，其 `quote` 必须能在原文中逐字找到
 **程序校验优先于模型判断**
 Reviewer 先用程序核对「断言里的数字是否出现在所引原文」，命中即判定，不调模型；只有语义层面的问题才交给 LLM。又快又准又免费的事，不该花钱让模型猜。
 
-**DAG 编排，支持并行与断点续跑**
-自研轻量编排引擎：拓扑排序调度、无依赖节点并行、状态持久化。进程重启后从断点继续，已完成的节点不重跑。
+**图编排，支持并行与断点续跑**
+整条流水线是一张 LangGraph `StateGraph`：`Send` 按章节数在运行时动态扇出并行、barrier 边做真汇合、条件回边构成写-审-改闭环、Checkpointer 按 `thread_id` 落盘。进程重启后从断点继续，已完成的节点不重跑；节点级失败按 `RetryPolicy` 重试，确定性失败（如回放缓存缺失）不重试。
 
 **全链路成本可归因**
 每次调用的 token / 延迟 / 成本落入 spans 表，能回答「这份研报的钱花在哪个环节」，并按节点归因。
@@ -160,10 +160,10 @@ flowchart TB
         FA["FastAPI<br/>REST + SSE 流式推送"]
     end
 
-    subgraph orch["编排层"]
-        PL["Planner<br/>拆解任务 DAG"]
-        SCH["调度器<br/>拓扑排序 · 并行执行"]
-        SM["状态机<br/>断点续跑 · 失败重试"]
+    subgraph orch["编排层 · LangGraph StateGraph"]
+        PL["planner 节点<br/>拆解大纲"]
+        SCH["Send 动态扇出 + barrier 汇合<br/>research 并行 · write/review 串行"]
+        SM["Checkpointer + RetryPolicy<br/>thread_id 断点续跑 · 节点级重试"]
     end
 
     subgraph agents["Agent 层"]
@@ -179,16 +179,16 @@ flowchart TB
 
     subgraph data["数据层"]
         DB[("SQLite / MySQL<br/>tasks · nodes · spans")]
-        KB[("本地语料<br/>BM25 检索 · 零依赖")]
+        KB[("本地语料<br/>三档检索：bm25 默认 / vector / hybrid")]
     end
 
     UI --> FA
     FA --> PL
     PL --> SCH
-    SCH --> SM
     SCH --> RE
     SCH --> WR
     SCH --> RV
+    SCH -. 每步状态写回 .-> SM
     RE --> KB
     RE --> GW
     WR --> GW
@@ -205,7 +205,7 @@ sequenceDiagram
     autonumber
     participant U as 用户
     participant A as API
-    participant S as 调度器
+    participant S as LangGraph 图
     participant R as Researcher
     participant W as Writer
 
@@ -213,7 +213,7 @@ sequenceDiagram
     A->>S: 创建任务，落库
     A-->>U: task_id + SSE 连接
 
-    S->>S: Planner 生成大纲与 DAG
+    S->>S: planner 节点生成大纲
     S-->>U: SSE: 大纲已生成（5 章）
 
     par 并行检索
@@ -243,7 +243,7 @@ contracts  ←  core  ←  {persistence, agents, rag, llm, evaluation}  ←  orc
 | 目录 | 内容 |
 |---|---|
 | `backend/app/contracts/` | 跨层契约（叶子层，零内部依赖） |
-| `backend/app/orchestrator/` | DAG 引擎：建图、调度、状态机 |
+| `backend/app/orchestrator/` | LangGraph 图：State、节点、条件边、Checkpointer |
 | `backend/app/agents/` | 四个 Agent + MockAgent（可切换做回归） |
 | `backend/app/llm/` | 网关：分级 / 降级 / 计量，以及录制回放 |
 | `backend/app/rag/` | 本地语料检索与读写 |
@@ -260,17 +260,20 @@ contracts  ←  core  ←  {persistence, agents, rag, llm, evaluation}  ←  orc
 
 | 层 | 选型 | 为什么 |
 |---|---|---|
-| 编排 | **自研 DAG 引擎** | 需要精细控制重试粒度与断点续跑持久化，框架黑盒反而增加调试成本。核心逻辑约 300 行 |
+| 编排 | **LangGraph `StateGraph`** | 原生就有本项目真正需要的三件事：循环（写-审-改回边）、运行时才知道分支数的并行（`Send`）、断点续跑（Checkpointer）。生态与团队可维护性也明显好于自研。**迁移前是自研 DAG 引擎**（建图 + 调度约 470 行），换框架的动机与代价写在 [STAGE5_ACCEPTANCE.md](docs/STAGE5_ACCEPTANCE.md)，旧实现见 git 历史 |
 | 后端 | FastAPI | 原生 async，SSE 实现简单，与 asyncio 调度天然契合 |
 | 存储 | SQLite（开发）/ MySQL（生产） | 状态唯一事实来源是数据库；SQLite 让本地零运维跑通，切 MySQL 只改 `DATABASE_URL` |
-| 检索 | BM25 关键词检索 | 目标是「引用可溯源」而非召回率；零依赖、结果可复现，也不会因 embedding 升级导致评测基线漂移 |
-| 前端 | Vue3 + Vite | **没有用图布局库**：DAG 形状固定（planner → 并行 research → 串行 write），三行自己算就够 |
+| 检索 | **三档：bm25（默认）/ vector / hybrid** | 目标是「引用可溯源」而非召回率。默认仍是 BM25：零依赖、结果可复现，也不会因 embedding 升级导致评测基线漂移；向量档是补召回，不是替换。`hybrid` 用 RRF 按**名次**融合两路，不做归一化加权 |
+| 前端 | Vue3 + Vite | **没有用图布局库**：图形状固定（planner → 并行 research → 串行 write），三行自己算就够 |
 | 可观测 | **自建 Trace** | 只需要 token / 延迟 / 成本三个维度，上 OTel 属于过度设计 |
 | 部署 | `scripts/start.sh` / `start.bat` | 一条命令起后端 + 前端。当前是单进程 + SQLite 的本地服务，容器化收益不抵复杂度 |
-| 开发期成本 | **LLM 录制/回放** | 改前端/改状态机时会反复跑同一批 prompt。录一次之后全命中缓存：毫秒级、结果确定、¥0 |
+| 开发期成本 | **LLM 录制/回放** | 改前端/改图结构时会反复跑同一批 prompt。录一次之后全命中缓存：毫秒级、结果确定、¥0 |
 
-刻意不引入：OpenAI SDK（只用 OpenAI 兼容的 HTTP 接口）、向量数据库、分词库。
+刻意不引入：OpenAI SDK（只用 OpenAI 兼容的 HTTP 接口）、向量数据库（22 篇 / 79 片段，纯 Python 点积够用，且自己写才能把「每条向量对应哪段原文」显式存下来）、分词库。
 少一个依赖，就少一处版本漂移导致的评测不可复现。
+
+例外只有编排层：`langgraph` 是显式引入的框架依赖。它只用到 `langchain-core` 的基础抽象，
+不引入 LangChain 的链，也不替换 `app/llm/` 的网关——检索与 LLM 调用仍然是我们自己的代码。
 
 ---
 
@@ -290,7 +293,7 @@ contracts  ←  core  ←  {persistence, agents, rag, llm, evaluation}  ←  orc
 | `DELETE /api/corpus/{doc_id}` | 删除一篇 |
 | `GET  /api/corpus/{doc_id}` | 一篇文档的全文 |
 
-SSE 用**轮询数据库**而不是给调度器加回调：调度器完全不知道 HTTP 的存在，崩溃重启后前端连上就能继续看到进度，不需要任何「事件重放」。代价是 300ms 粒度。
+SSE 用**轮询数据库**而不是给编排层加回调：图完全不知道 HTTP 的存在，崩溃重启后前端连上就能继续看到进度，不需要任何「事件重放」。代价是 300ms 粒度。
 
 ---
 
@@ -311,6 +314,10 @@ SSE 用**轮询数据库**而不是给调度器加回调：调度器完全不知
 
 判官与生成模型分离（生成用 DeepSeek，判官用 GLM），避免「自己给自己判卷」。
 
+> 上表与下面几条结论都是**改造前的编排基线**（自研 DAG 引擎，`eval/results/v6/`）。
+> 编排层迁到 LangGraph 后这轮评测尚未重跑，数字仍然成立但对应的是旧编排，
+> 新基线要另起目录重跑——见 [STAGE5_ACCEPTANCE.md](docs/STAGE5_ACCEPTANCE.md) 的未完成项。
+
 > 评测方法、judge 校准、以及「为什么覆盖率一度显示不显著」的完整复盘见
 > [docs/STAGE3_ACCEPTANCE.md](docs/STAGE3_ACCEPTANCE.md)。
 
@@ -320,6 +327,8 @@ SSE 用**轮询数据库**而不是给调度器加回调：调度器完全不知
 
 - 产出定位是**初稿**，还达不到可直接发布的水平
 - 只支持中文；知识库需预先灌入，不具备实时联网检索
+- **LangGraph 改造后 40 主题评测基线尚未重跑**。上面「效果与代价」的三档数字来自改造前的自研编排（`eval/results/v6/`），对当前代码只能作参考，不能当成本轮改造的评测结论
+- 检索的 `vector` / `hybrid` 两档没有专属界面：切档靠 `.env` 的 `RETRIEVAL_MODE`，界面顶部只显示**实际生效**的档位（含降级标记与 embedding 模型），不显示「这条片段由哪一路召回」
 - **章节重复率约 8%**（跨章重复的论述片段占比）。根因不是算法：它由「每主题可用文档数」驱动——真实语料实验中该值从 8 提到 11 篇，重复率相应从 13.3% 降到 7.7%。解决它要靠补语料密度；两次专门优化（prompt 层去重、检索层文档预算）都无效甚至有害，已默认关闭。详见 [docs/REPEAT_RATE.md](docs/REPEAT_RATE.md)
 - 评测判官跑在 `reasoning_effort=low`（为速度让步），绝对分数可能偏乐观
 - 单实例假设：多副本部署需自行按 `task_id` 加分布式锁
@@ -332,10 +341,11 @@ SSE 用**轮询数据库**而不是给调度器加回调：调度器完全不知
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 设计决策与取舍：为什么这么做，放弃了什么 |
 | [STRUCTURE_REVIEW.md](docs/STRUCTURE_REVIEW.md) | 结构审查：目录、分层、依赖方向的问题与修正 |
-| [STAGE1_ACCEPTANCE.md](docs/STAGE1_ACCEPTANCE.md) | 编排引擎验收：并行/串行、阻塞传播、断点续跑 |
+| [STAGE1_ACCEPTANCE.md](docs/STAGE1_ACCEPTANCE.md) | 自研编排引擎验收（历史记录）：并行/串行、阻塞传播、断点续跑 |
 | [STAGE2_ACCEPTANCE.md](docs/STAGE2_ACCEPTANCE.md) | 四个 Agent 与网关验收 |
 | [STAGE3_ACCEPTANCE.md](docs/STAGE3_ACCEPTANCE.md) | 评测方法论、三档对比、失败复盘 |
 | [STAGE4_ACCEPTANCE.md](docs/STAGE4_ACCEPTANCE.md) | 接口与前端验收 |
+| [STAGE5_ACCEPTANCE.md](docs/STAGE5_ACCEPTANCE.md) | 编排迁到 LangGraph + 三档检索：迁移映射、踩坑与修正、实测数据、未完成项 |
 | [REPEAT_RATE.md](docs/REPEAT_RATE.md) | 章节重复率：两次失败与真实语料上的因果验证 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、分层约束、测试与 commit 规范 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本演进，以及每次改动背后的理由 |

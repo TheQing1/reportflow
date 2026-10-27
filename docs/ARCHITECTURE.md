@@ -29,7 +29,7 @@
 |---|---|---|
 | 契约层 | 节点/状态/交接协议/存储端口的定义 | 不含任何实现与 IO |
 | 接入层 | 接收任务、推送进度、鉴权 | 不含任何业务逻辑 |
-| 编排层 | 拆解 DAG、调度执行、管理状态 | 不关心 Agent 内部怎么实现 |
+| 编排层 | 拆解图、驱动执行、管理状态与断点 | 不关心 Agent 内部怎么实现 |
 | Agent 层 | 单一职责的生成/校验动作 | 不感知调度、不互相直接调用 |
 | 支撑层 | LLM 调用、上下文交接、成本归集 | 不含业务语义 |
 | 数据层 | 状态、产出、向量的持久化 | — |
@@ -53,7 +53,89 @@ contracts  ←  core  ←  {persistence, agents, llm, rag}  ←  orchestrator  �
 
 ---
 
-## 3. DAG 编排引擎
+## 3. 编排层：LangGraph 图
+
+> **迁移说明（先说清现状，免得下面读成"一直如此"）。**
+> 编排层原本是自研的 DAG 引擎（`orchestrator/dag.py` 建图 + `orchestrator/scheduler.py` 调度循环，
+> 两个文件合计约 540 行，其中核心逻辑约 470 行）。后来整体迁到 LangGraph `StateGraph`，
+> 自研实现已删除，旧代码见 git 历史。
+> 迁移**不是**因为自研写不动：那套引擎跑过了阶段一~四的验收，行为是对的。
+> 换的真实理由有三条，按重要性排序：
+>
+> 1. **图原语对上了问题形状**。这个流水线需要三件事：写-审-改的**环**、章节数到运行时才知道的
+>    **动态并行**、以及进程崩溃后的**断点续跑**。自研引擎为了第一条只能靠"重置节点 + attempt+1"绕开环
+>    （见 §3.5），而后两条要自己维护整套状态机与持久化。LangGraph 三件都是原语。
+> 2. **可维护性与招人成本**。图、状态迁移、重试、checkpoint 由框架维护，新同事看的是官方文档而不是
+>    我们那 470 行的调度循环。
+> 3. **生态**。`astream_events`、Postgres/Redis saver 这类能力，自研要重做一遍。
+>
+> 代价也明确记下来：多了一个不能随手改的依赖（版本漂移会让评测基线不可复现，所以 `requirements.txt`
+> 锁定大版本）、框架的隐式语义要靠踩坑才认得（真踩到的几个坑见
+> [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md)）。**"用框架"没有让编排变简单，只是把复杂度从
+> "自己写的状态机"换成了"必须理解对的图语义"。**
+
+### 3.0 迁完之后，编排层只剩三个部件
+
+迁完之后，编排层只有三件事，边界比自研时代更清楚：
+
+| 文件 | 管什么 | 不管什么 |
+|---|---|---|
+| `orchestrator/graph_langgraph.py` | 节点清单（落库契约）+ `StateGraph` 的节点/边/汇合/回边 | 不碰任务生命周期，不碰 checkpoint 装配 |
+| `orchestrator/runner.py` | `submit` / `run`、`task_id → thread_id`、孤儿回收、终态汇总 | 不写图结构 |
+| `persistence/store.py`（`TaskStore`） | 节点状态、产出、attempt、review_round 的**唯一事实来源** | 不感知 LangGraph |
+
+三条"必须靠对的图原语"决定了这张图长什么样，写在这里是因为它们都属于**看起来能跑、实际会静默错**的那类：
+
+- **汇合要用 barrier 边，不是普通边**。`add_edge([research_ch1..N], "write_ch1")` 才是 wait-for-all。
+  普通边是 OR 触发：任一上游完成就放行。第一版用普通边，验收表现为"任务 DONE 但一半章节还是 PENDING"。
+- **动态扇出用 `Send`，不是写死的边**。章节数由 planner 产出决定，只有 `Send` 能在运行时决定分支数。
+- **打回用条件边回边，不再绕**。`review_ch{i}` 判 revise 就 `add_conditional_edges` 回 `write_ch{i}`。
+
+#### 3.0.1 State 只放能 JSON 化的簿记
+
+```python
+class ReportState(TypedDict, total=False):
+    topic: str
+    sections: int
+    outline: list[dict[str, Any]]
+    findings: Annotated[dict[str, dict], _merge_dict]     # 并行分支各写各的章，按键合并
+    chapters: Annotated[dict[str, dict], _merge_dict]
+    reviews:  Annotated[dict[str, dict], _merge_dict]
+    review_round: Annotated[dict[str, int], _merge_dict]
+    reopened: Annotated[dict[str, bool], _merge_dict]
+    unresolved: Annotated[list[str], operator.add]
+    errors: Annotated[list[str], operator.add]
+```
+
+三个决定值得解释：
+
+1. **并行字段必须带 reducer**。五个 research 在同一超步里各写 `findings` 的一个键，
+   没有 `Annotated[..., _merge_dict]` 就是后写的覆盖先写的——而这种丢失不会报错，只会让某几章"没查到东西"。
+   用按键合并而不是 `operator.add` 累加列表，是因为下游要按章号取值，列表还得再扫一遍。
+2. **state 里绝不放 retriever / gateway / registry**。checkpoint 要 JSON 序列化落盘，对象进 state
+   要么当场炸，要么更糟：反序列化出一个"看起来能用但连接已死"的副本。
+   这些依赖一律用闭包传（`compile_report_graph(...)` 的参数进 `NodeRunner`），state 只放纯数据。
+3. **state 不是产出的事实地**。`findings` / `chapters` 这些字段只服务于"条件边要判断这一章审过没有"。
+   真正的产出（正文、citation_map、review verdict）在 `nodes` 表里，理由见下。
+
+#### 3.0.2 为什么保留双写 TaskStore
+
+这是迁移里唯一一个"框架已经替我存了状态，为什么还要再写一遍库"的问题。答案是**两者回答的不是同一个问题**：
+
+| | checkpoint | `nodes` 表 |
+|---|---|---|
+| 回答什么 | 图推进到哪一步、下一个该跑谁 | 这个节点的状态/产出/attempt/第几轮 review 是什么 |
+| 谁在消费 | 续跑逻辑（`ainvoke(None, cfg)`） | 前端 SSE 轮询、exporter 取正文、spans 成本归因、阻塞传播判定 |
+| 存哪 | `data/reportflow.db.checkpoints`（独立 sqlite 文件） | 任务库 `nodes` 表 |
+
+如果让消费方改读 checkpoint，等于把"对外数据契约"绑死在某个框架的内部结构上：框架升级换了序列化格式，
+前端就得跟着改。所以节点每次状态变化（`start_node` / `finish_node` / `fail_node` / `block_node`）
+都在当次执行内写回表，**换编排框架没有改变任何一个消费方**——这也是这次迁移能保持 SSE、导出、
+成本报表零改动的原因。
+
+checkpoint 单独放一个 sqlite 文件，不塞进任务库：LangGraph 会自己建表，混在一起会让"哪个表是事实来源"
+变得含糊。非 sqlite 部署（MySQL）暂时不落 checkpoint，只能整轮重放——此时靠 `nodes` 表的 DONE 状态
+跳过已完成节点，失掉的是"半个超步"的中途续跑能力，日志里会明说。
 
 ### 3.1 节点模型
 
@@ -74,7 +156,7 @@ class NodeSpec:
     timeout_s: int = 120
 ```
 
-一次任务的 DAG 形态（阶段一实现，5 章）：
+一次任务的拓扑形态（5 章）：
 
 ```
 planner
@@ -84,21 +166,70 @@ planner
    ├── research_ch4 ─┤
    └── research_ch5 ─┘
 
-research_ch1 → write_ch1 → review_ch1 → write_ch2 → review_ch2 → ... → review_ch5
+research_ch1..5 ═(barrier)═> write_ch1 → review_ch1 → write_ch2 → review_ch2 → ... → review_chN
 ```
+
+`NodeSpec`/`Graph` 仍是契约层的类型，用途没变：它是**落库契约**。`nodes` 表的 `deps` 列被前端 DagView
+用来分列、被失败阻塞判定用来找下游，所以它的形状必须与历史版本一致。执行拓扑由
+`compile_report_graph` 从同一份清单推导——一份清单、两个用途，两者不会漂移。
 
 两条边需要单独解释：
 
 - `research_*` 只依赖 `planner`，所以它们**同时**进入就绪态，并行度只受全局并发上限约束。
-- `write_chN` 依赖 `research_chN` **和 `review_ch(N-1)`**。后者是可选项（`serial_tail`）：
+  图上由 `Send` 动态扇出表达（章节数是 planner 的产出，写不成静态边）。
+- `write_chN` 依赖 `research_chN` **和上一章的尾部**。后者是可选项（`serial_tail`）：
   打开时尾部严格一章一章走，好处是第 N 章的 review 意见能约束第 N+1 章，跨章衔接更稳；
   关闭时退化为"每章各自 write→review"，尾部出现流水线，但章节之间彻底独立。
-  阶段一默认打开——既满足"write/review 串行可观测"的验收要求，也符合长文档逐章推进的真实节奏。
+  默认打开——既满足"write/review 串行可观测"的验收要求，也符合长文档逐章推进的真实节奏。
   代价写在 §10：没有流水线重叠，尾部耗时是线性的，接真实 LLM 后会被放大。
+  两个容易踩的细节：
+  1. `serial_tail` **不落库成布尔字段**，而是 `run()` 从 deps 反推（deps 是权威记录，
+     换进程也不会出现"标记与 deps 不一致"）。判据必须是"`write_ch{i}`(i>1) 的 deps 多于 1 个"，
+     不能写成"deps 里含 `review_ch`"——评测 B 组无 Reviewer 时那条是 `write_ch{i-1}`，
+     判据会恒为 False，把串行尾部误判成流水线（真实事故，见 STAGE5 坑三）。
+  2. 流水线模式（`serial_tail=False`）在图上有个额外要求：各章必须先汇到一个 join 节点再连 `END`，
+     否则第一个分支到 `END` 时整图就被判结束（见 STAGE5 坑四）。
 
-### 3.2 调度循环
+### 3.2 执行模型
 
-实际实现（`backend/app/orchestrator/scheduler.py`，已简化）：
+#### 3.2.1 现在：StateGraph 的超步
+
+迁移后不再有一个"我们自己的 while 循环"。执行由 LangGraph 的超步（super-step）驱动：
+
+```
+planner ──Send(N)──> research_ch1..chN  （同一步并行，被信号量压到并发上限）
+                          │ barrier：全部到齐
+                          ▼
+    write_ch1 → review_ch1 ─pass→ write_ch2 → … → review_chN → END
+        ▲            │
+        └───revise───┘   ← 条件边回边
+```
+
+五个设计点，都是从自研版本继承下来的**语义**，只是换了承载方式：
+
+- **并发仍然要自己压**。LangGraph 的超步并行不受 `max_concurrency` 约束，`Send` 扇出的 N 个 research
+  会一次性全放出去。所以节点执行器外面包了一层 `asyncio.Semaphore`——验收要求"research 最大重叠 = 3"
+  是硬指标，不能指望框架替我们节流。
+- **汇合必须用 barrier 边**。这是本次迁移最贵的一课，细节见
+  [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md)。一句话：普通边是 OR 触发，"等所有 research 到齐"
+  只能用 `add_edge([所有 research], "write_ch1")` 表达。
+- **重试仍在节点体内完成，`RetryPolicy` 是第二道防线**。这点反直觉但必要：如果让节点体把最终失败抛出去，
+  LangGraph 会中断整个超步，同层兄弟章节被连坐——而"单章失败不拖累兄弟章节"是本项目的核心卖点。
+  所以 `NodeRunner.run` 自己吞掉最终失败、写 FAILED/BLOCKED 后返回空更新；
+  `RetryPolicy` 只负责接住节点体外层那些非预期异常，两处口径保持一致。
+- **执行前的闸门只做同步判定，不要用"等待"去补图语义**。闸门（`_gate`）只承担两件框架不管的事：
+  ① 上游失败 → 写 `BLOCKED` 落库（否则前端看到一堆永远 PENDING 的节点）；
+  ② 断点续跑后按库里的真实状态决定该不该跑。"何时该跑"交给图，这是把编排交给框架的意义。
+  曾经因为坑三（`serial_tail` 判据错）导致下游被提前派发，于是给闸门加了轮询等待去兜底；
+  判据修好后等待就成了纯粹的坏味道——它把顺序问题伪装成超时，还把"偶发卡住"变成"偶发变慢"。
+  现已删除，详见 `STAGE5_ACCEPTANCE.md` 坑五。
+- **单实例假设没变**。`start_node` 仍是条件更新实现的原子抢占；多副本部署要按 `task_id` 加分布式锁，
+  否则两个进程会同时驱动同一个 `thread_id`。
+
+#### 3.2.2 迁移前：自研调度循环（存档，供对照）
+
+下面这段是**旧**实现（`orchestrator/scheduler.py`，已删除）。保留它是因为其中四条规则
+在 LangGraph 里换了形式但没有消失，读旧代码更容易看清"为什么需要它们"：
 
 ```python
 while True:
@@ -125,23 +256,24 @@ while True:
     break                                  # 既无 running 也无 retrying → 收敛
 ```
 
-四个设计点：
+这四条规则以及它们现在的去向：
 
-- **并发用"就绪批次 + 容量判定"而不是一次性 gather 全部**。20 个章节同时打 LLM 会直接触发 429，
-  反而更慢。容量 = 上限 − 当前在跑数，慢节点不会阻塞后续波次。
-- **轮询而非事件驱动**。轮询实现简单、崩溃后恢复自然；事件驱动在这个规模下收益不值复杂度。
-- **终态判定必须是显式的 `all(is_terminal)`**，而不是"没有 ready 就退出"。
-  按后者写，失败节点的下游会永远停在 PENDING，任务已经死了却无法被判定为结束。
-  `BLOCKED` 必须算终态，这一点是 §3.3 的直接推论。
-- **`RETRYING` 不是 `RUNNING`，但也不能当死锁**。引入指数退避后，节点会有一个
-  "既不在跑、也还没失败"的窗口。按"没有 running 就 break"判定，退避没结束任务就退出了；
-  正确做法是按 `retry_at` 睡到最早到期者再继续。这是原设计伪代码里最容易漏掉的一条。
-- **单实例假设**：这个调度循环默认每个任务只由一个进程驱动。多副本部署时必须按 `task_id` 加 Redis 分布式锁，
-  否则两个进程会同时调度同一批节点，导致重复调用 LLM、成本翻倍。当前版本按单实例设计，
-  这一点要在文档里写明而不是回避。（`start_node` 已用条件更新实现原子抢占，
-  将来加锁即可平滑多副本，状态机无需改动。）
+- **就绪批次 + 容量判定** → 换成 `asyncio.Semaphore`，理由不变：20 个章节同时打 LLM 会直接 429。
+- **轮询而非事件驱动** → 图的推进由框架驱动，节点内部仍然按 `retry_at` 轮询等退避到期。
+  保留轮询的理由也还在：两条时间线（进程 monotonic 与入库的墙钟 utcnow）差几微秒就够让节点
+  永远停在 RETRYING，所以 `_await_retry_due` 多等一点并轮询确认，把"偶尔差一点"变成"一定能推进"。
+- **终态判定必须显式** → 图的执行语义天然保证走到 END，但**任务终态仍要自己算**：
+  节点全 DONE 但存在"打回到上限仍未通过"的章节时，终态必须是 `PARTIAL` 而不是 `DONE`。
+  这个判定现在落在 `runner._final_task_status` / `_has_unresolved`，从库里推导，重启后结论一致。
+- **`RETRYING` 不能当死锁** → 语义保留：它是非终态也不在跑，必须按 `retry_at` 等，不能因为
+  "没有 running"就收工。
 
 ### 3.3 状态机
+
+> 状态机的**定义**没有因为换框架而变——它记录的是"节点在库里是什么状态"，而不是"框架内部执行到哪"。
+> 变的是**谁在驱动迁移**：过去是调度循环每轮扫表重算，现在是 `NodeRunner.run` 在节点每次状态变化时
+> 立即写回（`start_node` / `finish_node` / `fail_node` / `block_node`），再加上一个执行前的闸门
+> （`_gate`）负责 skip / block 两种让路。
 
 ```
                 ┌──────────────── 退避到期 ────────────────┐
@@ -167,8 +299,8 @@ PENDING/RETRYING ── 任一上游 ∈ {FAILED, BLOCKED} ──► BLOCKED
 三点说明：
 
 - **`BLOCKED` 是显式状态而非隐式推导**。一个章节检索三次都失败后，它的 `write`/`review`
-  必须变成 BLOCKED 而不是一直 PENDING——否则调度器会永远等它。而且 BLOCKED 必须参与
-  "是否全终态"的判定，否则任务会显示"运行中"但实际上再也推进不了。
+  必须变成 BLOCKED 而不是一直 PENDING。在 LangGraph 里这条尤其重要：图已经被 barrier 边保住了顺序，
+  但"上游失败"这件事**框架不替我们表达**，必须写进库，否则前端会看到一堆永远 PENDING 的节点。
 - **`BLOCKED` 只能从 `PENDING` / `RETRYING` 迁移而来**，绝不能覆盖 `DONE`。
   DONE 是下游判定的依据，被覆盖会让已完成的工作被"撤销"。
 - **`RETRYING` 必须落库**，不能只存在于内存。进程在退避期间被杀，重启后要能知道
@@ -176,16 +308,27 @@ PENDING/RETRYING ── 任一上游 ∈ {FAILED, BLOCKED} ──► BLOCKED
 
 ### 3.4 断点续跑
 
-**实现比听起来简单**：所有节点状态落 MySQL，重启后：
+现在有**两条**恢复路径，必须区分清楚——这是迁移后最容易混淆的地方：
 
-1. `DONE` → 跳过
+| 入口 | 判据 | 做法 | 代价 |
+|---|---|---|---|
+| 中途断电 | checkpoint 里还有 `next`（半个超步） | `ainvoke(None, cfg)` 从最后一个 checkpoint 继续 | 已完成的节点不会再跑 |
+| 失败重置后重跑（`reset_failed`） | 图其实已经走到 END，没有待执行节点 | 以初始 state 重放，靠 `nodes` 表的 DONE 状态跳过 | 图要重走一遍，但节点不重跑 |
+
+**分工是"图负责推进、库负责裁决"**：`task_id` 一一映射成 `thread_id`（`reportflow:<task_id>`，不做哈希，
+避免碰撞），同一个任务在任何进程里都落到同一条 checkpoint 链上；而"这个节点到底做过没有"永远问 `nodes` 表。
+判据本身就是一行 `bool(snapshot.next)`，见 `runner._resume_mode`。
+
+节点侧仍然沿用旧的四条规则：
+
+1. `DONE` → 跳过（`start_node` 的条件更新天然幂等）
 2. `RUNNING` → 视为孤儿（进程已死），重置为 `PENDING` 重跑（`attempt` 不变，幂等键不变）
 3. `PENDING` / `RETRYING` → 正常调度（RETRYING 等 `retry_at` 到期）
-4. `FAILED` / `BLOCKED` → 不自动复活，需要显式"重置失败节点"命令（阶段一用 `--reset-failed`）。
+4. `FAILED` / `BLOCKED` → 不自动复活，需要显式"重置失败节点"命令（`--reset-failed`）。
    自动复活是危险的：根因没修就重跑，只会把同样的钱再烧一遍。
 
 这里有个容易漏的前提：**执行策略也必须落库**。如果只存 `status`/`output`，重启后
-从节点行重建 DAG 时，`max_retries` 与 `timeout_s` 会退回代码默认值，
+从节点行重建图时，`max_retries` 与 `timeout_s` 会退回代码默认值，
 于是"首跑"和"续跑"用了两套策略——而这种不一致只在崩溃后出现，测试极难覆盖。
 所以 `nodes` 表显式保存 `attempt / max_retries / timeout_s / deps / payload / owner / retry_at`。
 
@@ -213,25 +356,38 @@ PENDING/RETRYING ── 任一上游 ∈ {FAILED, BLOCKED} ──► BLOCKED
 > （`cli export --check`，只标记不改稿）。下面的机制仍然保留，用 `--review` 可重新启用。
 > 依据见 [STAGE3_ACCEPTANCE.md](STAGE3_ACCEPTANCE.md) §7。
 
-Reviewer 判 `revise` 后要让 Writer 重写。直觉做法是加一条 `review_chN → write_chN` 的边，
-**这是错的**：DAG 立刻成环，拓扑排序直接失败。
+Reviewer 判 `revise` 后要让 Writer 重写。在自研 DAG 时代，直觉做法是加一条 `review_chN → write_chN`
+的边，**那是错的**：DAG 立刻成环，拓扑排序直接失败。
 
-实现走的是"重置 + 换 attempt"：
+**迁到 StateGraph 之后不用绕了**：图允许成环，条件边直接回边就是它本来的语义：
 
 ```
-review_chN verdict=revise
+review_chN verdict=revise  →  add_conditional_edges(review_chN, route, [write_chN, 下一站])
+                              route 看 state["reopened"][ch]：True 回 write_chN，否则往下走
+```
+
+同时保留的两件旧机制，**都不是历史包袱**：
+
+```
   → 目标节点（write_chN [+ research_chN] + review_chN）重置为 PENDING，attempt+1
   → 把审稿意见写进 revision_hint（唯一允许跨轮次传递的自然语言）
   → review 节点 review_round+1，超过上限则接受当前稿，任务终态降级 PARTIAL
 ```
 
-重置时 `attempt+1` 是关键，不是顺手写的：幂等键是 `(node_id, attempt)`，
-不涨 attempt 就会命中"这个节点已完成"的保护，重写永远不生效（文档 §3.4 那个坑的第二次出现）。
+- **`attempt+1` 仍然必要**：幂等键是 `(node_id, attempt)`，不涨 attempt 就会命中"这个节点已完成"的保护，
+  回边会被闸门直接让路，重写永远不生效（见 §3.4）。**但它的职责变了**：现在它只表示"第几次尝试"，
+  不再承担控制流——控制流由回边负责。
+- **重置要在一次事务里做完**（`store.reopen_for_revision`）：目标回 PENDING、attempt+1、轮数+1 一起提交。
+  否则崩溃会留下"写了 PENDING 但没加 attempt"的半套状态。
+- **循环必须有上限**：`recursion_limit` 显式设 200（LangGraph 默认 25，章节多或打回多会撞
+  `RecursionError`），再加 `max_review_rounds` 兜底。上限用尽仍不通过就接受当前稿并记 `unresolved`，
+  任务终态降为 `PARTIAL`——"没通过审查"不能看起来像成功。
 
 两个容易写错的地方：
 
-- **必须在算 ready 之前处理打回**。否则同一轮里 `review_ch1` 判不通过、
-  `write_ch2` 却因为 `review_ch1` 是 DONE 而被放出去写 —— 第 2 章会基于一份被否掉的第 1 章往下写。
+- **打回必须在下一章开始写之前生效**。串行尾部下 `review_ch1` 之后本来就轮到 `write_ch2`，
+  所以路由函数必须先判 `reopened` 再决定去下一章，否则第 2 章会基于一份被否掉的第 1 章往下写。
+  自研时代这条是"必须在算 ready 之前处理打回"，同一个约束换了表达方式。
 - **打回目标要分流**（见 §5）。实测踩到过一次：Reviewer 对"本章没有引用"一律判
   `missing_evidence`，而素材本来就是空的，于是"打回 research → 重检 → 还是空 → 再打回"，
   两轮上限烧完、任务降级 PARTIAL，问题一点没解决。
@@ -361,6 +517,82 @@ review_chN verdict=revise
 | Reviewer | **程序优先，LLM 兜底** | 先查角标与数字（claim 里的带量纲数字必须出现在 quote 里），命中即判 `revise` 且**不调用模型**；程序通过后再让 LLM 判语义 |
 
 顺序不能反：程序能确定的事又快又准又免费，让模型去判断"这个数字对不对"既慢又会漏。
+
+### 5.2 检索层：三档、RRF 与溯源约束
+
+Researcher 的输入全部来自检索层，所以检索的契约变了，Researcher 的可靠性跟着变。这一节解释三档检索
+为什么这样切、RRF 为什么是 RRF、以及最要紧的一条——**换检索方式不能削掉溯源**。
+
+#### 5.2.1 三档，默认仍然是 BM25
+
+| 档 | 实际做什么 | 需要 `EMBEDDING_API_KEY` | 用途 |
+|---|---|---|---|
+| `bm25`（默认） | 纯关键词检索（`LocalCorpusRetriever`） | 否 | 历史 40 主题评测基线的口径 |
+| `vector` | 纯向量检索 | 是 | 补同义改写的召回 |
+| `hybrid` | BM25 + 向量，RRF 融合 | 是 | 两路互补 |
+
+**默认为什么不变**：现有基线是在 BM25 上跑的。默认档一换，历史数字立刻不可比，而"不可比"这件事
+不会报错，只会让以后每一次评测都含糊。所以三档是**新增能力**，不是静默替换；`build_retriever(mode=...)`
+是唯一入口，装配层不出现 if/else 分叉。
+
+`build_retriever` 刻意保持**同步**：装配层（assembler / api）本来就是同步代码。代价是向量索引不能
+在构造时建，改成第一次 `search()` 时惰性构建。同理 `reload()` 也必须同步（api 在上传文档后直接调它），
+所以它只重建 BM25（纯本地、毫秒级），向量索引标记为脏、等下一次 `search()` 时再异步重建——
+那条路径本来就在事件循环里。
+
+#### 5.2.2 为什么是 RRF，不是归一化加权求和
+
+这是本节唯一一个"选错了会静默变差"的决策：
+
+- BM25 的分数是**无界**的词频×IDF（实测单片段 0.5~30），余弦相似度在 [0,1]，量纲根本不可比。
+  要加权求和就得先归一化，而归一化的方法（min-max / z-score / 除以 top1）**会随查询变化**——
+  等于每次查询都换一把尺子。
+- RRF 只看**名次**：`score = Σ 1/(k + rank)`，`rank` 从 1 开始，`k=60` 是原论文
+  （Cormack et al., 2009）与工业界的默认值。它天然免疫两路量纲不一致，也不需要调权重。
+
+RRF 的实现（`rag/hybrid.py` 的 `rrf_fuse`）是个纯函数，抽出来是为了可测——融合的错法（rank 从 0 开始、
+k 用错、同一路里重复项被重复累加）**都不会报错，只会让排序悄悄变差**。同分时按首次出现顺序决定，
+保证结果确定性。
+
+**RRF 带来的一个跨层副作用**：`rag/budget.py` 与 `researcher._rerank_by_budget` 原先把"预算外文档"
+的分数乘 0.5 来降权。BM25 下相邻名次相对差 20%~50%，乘 0.5 是"降权但仍可翻盘"；而 RRF 相邻名次
+只差约 1.6%（k=60），字面乘 0.5 会把片段推到 61 名开外，**降权就退化成硬过滤**，与"优先但不独占"的
+设计意图正好相反。所以 `researcher.py` 里加了 `_looks_like_rrf()` 判定，RRF 档下改用名次惩罚
+（`_RRF_RANK_PENALTY = 30`，等效折扣强度与 BM25 档的 0.5 基本对齐）。`DOC_BUDGET` 默认关闭，
+这条只在开启预算时生效——但它是"换检索尺度会打到别的层"的典型例子。
+
+#### 5.2.3 溯源约束怎么保住的
+
+**`Snippet.text` 一律从 BM25 的 chunk 表取，向量索引里那份文本只用于建向量。** 融合只合并
+"片段身份"（`doc_id + page + text` 拼键，用 `\x00` 分隔防拼接碰撞），返回时统一从原文取。
+于是即便索引文件被人手改过，输出仍然是当前语料的逐字切片。
+
+**索引带指纹**：模型名 + 全部 chunk 文本（同样 `\x00` 分隔）。语料一变、模型一换，指纹对不上就
+自动作废重建——绝不能出现"新语料配旧向量"这种静默错误。
+
+**embedding 缓存键含模型名**（与 LLM 缓存刻意不同）。LLM 缓存不含模型名，是为了"换便宜模型调试
+不该让缓存全失效"；embedding 反过来：`bge-m3` 换 `bge-large` 是**完全不同的向量空间**，
+沿用"不含模型名"的口径会静默回放另一个模型的向量，检索结果看起来正常、实际全错。
+缓存落 `<llm_cache_dir>/embeddings/`，按单条文本缓存。
+
+#### 5.2.4 三种降级，语义必须分开
+
+| 情况 | 行为 | 为什么 |
+|---|---|---|
+| 没配 `EMBEDDING_API_KEY` | 全程按 BM25 跑（`effective_mode` 变 bm25） | 知识库功能不该因为缺一项配置就整体起不来；行为与改造前逐条一致 |
+| replay 模式缓存缺失 | 抛 `EmbeddingReplayMiss`（`no_retry=True`） | **不静默降级**：回放出来的结果 ≠ 录制时的混合检索结果，基线就假了 |
+| 网络抖动 / 5xx / 超时 | 本次降级为 BM25 并告警 | 检索只是素材入口，一次网络抖动不该让整份报告失败 |
+
+第二条是三条里最重要的：静默降级会让一次"混合检索评测"实际上跑的是 BM25，而报告上写着 hybrid。
+这类错误不报错、不异常，只会产出错误结论。
+
+#### 5.2.5 为什么不引 faiss / 向量数据库
+
+语料 22 篇 / 79 片段。79 × 1024 维的暴力点积在纯 Python 里是毫秒级，引一个几十 MB 的原生依赖
+换不来可感知收益。更关键的是第二条理由：**自己写才能把"每条向量对应哪段原文"显式存下来**——
+向量库只保证"能查到某个 id"，不保证 id 背后的文本没被改过，而这正是溯源的前提。
+
+代价也认：语料规模上去（比如上万片段）之后，暴力点积会真的变慢，那时该换就得换。
 
 ---
 
@@ -594,27 +826,39 @@ forbidden:
 
 | 决策 | 备选方案 | 为什么这样选 | 付出的代价 |
 |---|---|---|---|
-| 自研 DAG 引擎 | LangGraph / AutoGen | 需要精细控制重试粒度、幂等与断点续跑；框架黑盒增加调试成本 | 需自己处理并发、状态与异常，约 300 行 |
+| 编排顶层用 LangGraph `StateGraph` | 继续维护自研 DAG 引擎 / AutoGen / Prefect | 图原语（环、`Send` 动态并行、Checkpointer）正好是这个流水线的形状；状态迁移、重试、checkpoint 由框架维护，新人看官方文档而不是我们的调度循环 | 多一个不能随手升的依赖；框架的隐式语义要踩坑才认得（见 §3 开头与 STAGE5）。**迁移前是自研引擎，见 git 历史** |
+| 节点状态仍自己落库（双写） | 让消费方直接读 checkpoint | checkpoint 是框架内部结构，绑定它等于把对外契约交给框架版本；`nodes` 表才是 SSE / exporter / spans 的数据源 | 每处状态变化都要记得写回库，写漏了前端就不动 |
 | 分章生成 | 一次性生成长文 | 单章质量更可控，支持局部重写 | 章节间连贯性弱，需要 Editor 统稿补 |
 | 本地知识库 | 联网搜索 API | 结果可复现、零成本、引用可溯源 | 知识时效性受限，需预先灌库 |
 | 自建 Trace | OpenTelemetry | 需求仅三个维度且在单进程内 | 无通用 APM 生态，跨服务需重做 |
 | 结构化交接 | 传完整历史 | 控制 token 膨胀 | 摘要会丢推理过程，需靠 Reviewer 兜底 |
 | Reviewer 有锚校验 | 直接问 LLM「这段写得对吗」 | 避免 Reviewer 自己幻觉 | 依赖检索质量，原文不准则校验失效 |
 | 打回上限 2 次 | 不限次数直到通过 | 防止成本失控 | 质量天花板被限制，需接受 PARTIAL 交付 |
-| 打回用「重置 + attempt+1」 | 给 DAG 加 review→write 回边 | 回边会让图成环，拓扑排序直接失败；复用幂等键则不需要改图引擎 | 一轮打回要连带重置 review 自身，状态迁移要在一个事务里 |
+| 打回用条件边回边 | 「重置节点 + attempt+1」（迁移前的做法） | StateGraph 允许成环，回边是它本来的语义；`attempt` 回归"第几次尝试"，不再兼做控制流 | 需要把"打回"翻译成条件边路由，校验不严就退化成无限循环（靠 `review_round` 上限兜底） |
 | 程序校验优先于 LLM 校验 | 全部交给 LLM 判 | 角标映射、数字是否出现在原文里，程序判得又快又准且免费 | 只能覆盖"可机械判定"的错，语义层面的偏离仍需 LLM |
-| 检索先用 BM25 | 直接上 ChromaDB + BGE | 零依赖、可复现、不因 embedding 升级导致评测基线漂移 | 同义改写召不回来，需要 query 里带够关键词 |
+| 检索默认仍用 BM25 | 直接默认 hybrid / 上 ChromaDB + BGE | 目标仍是「引用可溯源」而非召回率：BM25 零依赖、可复现，也不会因 embedding 升级导致基线漂移。向量与 RRF 作为**新增档位**，不替换默认 | 同义改写召不回来，需要 query 里带够关键词；vector/hybrid 有网络与缓存依赖 |
+| 向量索引自己写，不引 faiss | faiss-cpu / ChromaDB / sqlite-vec | 79 片段暴力点积毫秒级；且只有自己写才能把"每条向量对应哪段原文"显式存下来（溯源前提） | 语料上万片段后会真变慢，那时需要换 |
 
 ---
 
 ## 10. 已知未解决问题
 
-- **波次推进的槽位浪费**：当前是"一批就绪节点同时启动，等这批全跑完再判断下一批"。
-  同波里一个慢节点会占着槽位，其余空闲槽位不会立刻补位。接真实 LLM（延迟方差大）后，
-  应改成"完成即补位"（`asyncio.wait(FIRST_COMPLETED)`）。
+- **40 主题评测基线未在 LangGraph 改造后重跑**（本轮最明确的欠账）。
+  README「效果与代价」的三档数字来自改造前的自研编排（`eval/results/v6/`），仍然成立，但对应的是旧编排。
+  新基线要另起目录（如 `eval/results/v9-langgraph/`）重跑，**不能**与旧数据混在一起比。
+  在三档检索上同理：`vector` / `hybrid` 只有单主题实测，没有 40 主题的量化对照。
+- **流水线模式（`serial_tail=False`）的拓扑正确性已覆盖，但并行度没有断言**。
+  四种 `serial_tail × with_review` 组合"每章都要跑完"已由 `TestTopologyMatrix` 锁住
+  （含一个真实踩过的严重 bug：`serial_tail` 从 deps 反推的判据在无 Reviewer 时恒为 False，
+  导致默认配置只生成第 1 章，见 STAGE5 坑三）。缺的是"流水线档下各章确实重叠推进"的时间重叠度断言
+  ——`serial_tail=True` 有这套口径，流水线档没有。
 - **尾部串行没有流水线重叠**：`serial_tail=True` 下 5 章的尾部耗时 ≈ 5×(write+review)，
-  research 早已跑完却在干等。是否需要提速，要等阶段三的评测数据说话——
-  并行化会牺牲跨章衔接，不能拍脑袋改。
+  research 早已跑完却在干等。是否需要提速，要看评测数据——并行化会牺牲跨章衔接，不能拍脑袋改。
+  （注：迁移后"波次推进的槽位浪费"已经没有了：`asyncio.Semaphore` 在节点完成时立刻释放，
+  后续节点随即补位，不再是"一波跑完再判下一批"。）
+- **`vector` / `hybrid` 缺少可观测的检索过程**：切档靠 `.env` 的 `RETRIEVAL_MODE`，
+  顶栏会显示**实际生效**的档位（含降级标记与 embedding 模型），但看不到"这条片段由哪一路召回、
+  两路各自排第几"。判断混合检索到底有没有参与，目前只能看日志。
 - **章节间重复**：相邻章节可能引用同一批数据，目前只靠 Editor 事后去重，没有根本解决。
   **阶段二用真实模型实测确认了这个问题**：5 章里有 4 章重复引用同一批数字（8.4GWh / 55% / 22/19/14%）。
   排查结论是**素材池不足**而非大纲重叠——把 Planner 的"维度互斥"约束加强后，大纲确实变干净了
